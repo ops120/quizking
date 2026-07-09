@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>QuizKing · 答题王 设置</title>
+<link rel="stylesheet" href="options.css" />
+</head>
+<body>
+<header>
+  <h1>QuizKing · 答题王 · 设置</h1>
+  <div class="sub">连接 OpenAI 兼容 LLM，自定义快捷键与气泡外观。</div>
+</header>
+<main>
+  <section>
+    <h2>LLM 连接</h2>
+    <label>Endpoint（不含 <code>/chat/completions</code>）
+      <input id="endpoint" type="text" placeholder="https://api.openai.com/v1" />
+    </label>
+    <label>API Key
+      <input id="apiKey" type="password" placeholder="sk-..." />
+    </label>
+    <label>Model
+      <input id="model" type="text" placeholder="gpt-4o-mini" />
+    </label>
+    <label>Temperature <span id="tempV">0.2</span>
+      <input id="temperature" type="range" min="0" max="2" step="0.1" />
+    </label>
+    <div class="row">
+      <button id="testBtn" class="primary">测试连接</button>
+      <span id="testRes" class="muted"></span>
+    </div>
+  </section>
+
+  <section>
+    <h2>Prompt 模式</h2>
+    <p class="muted">默认「只要答案」。想要解题步骤时切换到「答案 + 解析」或自定义。</p>
+    <label class="chk">
+      <input type="radio" name="promptMode" value="answer" checked />
+      只要答案（默认）
+    </label>
+    <div id="answerOnlyBox" class="promptBox">
+      <div class="muted">仅一条 system prompt，强制模型只输出 <code>{"answer":"..."}</code>。适合快速做题。</div>
+    </div>
+    <label class="chk">
+      <input type="radio" name="promptMode" value="reason" />
+      答案 + 解析
+    </label>
+    <div id="reasoningBox" class="promptBox">
+      <label class="inner">解析 Prompt（输出包含 reasoning 字段）
+        <textarea id="reasoningPrompt" rows="6"></textarea>
+      </label>
+    </div>
+    <label class="chk">
+      <input type="radio" name="promptMode" value="custom" />
+      自定义
+    </label>
+    <div id="customBox" class="promptBox">
+      <label class="inner">自定义 Prompt
+        <textarea id="systemPrompt" rows="6"></textarea>
+      </label>
+    </div>
+  </section>
+
+  <section>
+    <h2>外观与历史</h2>
+    <label>气泡透明度 <span id="opaV">0.95</span>
+      <input id="bubbleOpacity" type="range" min="0.4" max="1" step="0.05" />
+    </label>
+    <label class="chk">
+      <input id="saveHistory" type="checkbox" />
+      保存历史记录（最近 200 条）
+    </label>
+    <div class="row">
+      <button id="clearHistory">清空历史</button>
+      <button id="viewHistory">查看历史</button>
+    </div>
+    <div id="historyBox" class="history"></div>
+  </section>
+
+  <section>
+    <h2>快捷键</h2>
+    <p class="muted">在 <code>chrome://extensions/shortcuts</code> 中可重新绑定这 4 个命令。Windows / Linux 用 <kbd>Ctrl</kbd>，macOS 用 <kbd>⌘ Command</kbd>。</p>
+    <table class="kbd-table">
+      <thead>
+        <tr>
+          <th>快捷键</th>
+          <th>作用</th>
+          <th>何时用</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><kbd>Ctrl+Shift+Q</kbd></td>
+          <td><b>抓取选区</b></td>
+          <td>先在页面选中一段文字（含中文 / 公式 / 代码皆可），按后把选区文本发给 LLM。推荐：网页上能直接选中的题。</td>
+        </tr>
+        <tr>
+          <td><kbd>Ctrl+Shift+E</kbd></td>
+          <td><b>抓取可见区域</b>（截图）</td>
+          <td>整页变暗后拖框选区裁剪，截图发给多模态 LLM。推荐：题目是图片、表格、代码截图、PDF 阅读器视图，或反爬不让选。</td>
+        </tr>
+        <tr>
+          <td><kbd>Ctrl+Shift+P</kbd></td>
+          <td><b>抓取整页 DOM 文本</b></td>
+          <td>无选区时把整页 <code>innerText</code> 前 6000 字符发给 LLM。推荐：长文章 / 整段题文 / 多选合集。</td>
+        </tr>
+        <tr>
+          <td><kbd>Ctrl+Shift+H</kbd></td>
+          <td><b>显示 / 隐藏气泡</b></td>
+          <td>答题完成后想收起气泡（不删除内容），再按一次又出现。气泡拖到屏幕任何位置可记忆。</td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="muted">其他触发方式：页面右下角「王」字悬浮按钮（悬停展开 4 个子按钮）、选中文字右键菜单、工具栏图标 popup。</p>
+  </section>
+</main>
+
+<footer>
+  <button id="saveBtn" class="primary">保存</button>
+  <span id="saveRes" class="muted"></span>
+</footer>
+<script src="options.js"></script>
+</body>
+</html>

@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>QuizKing · 答题王</title>
+<style>
+  body { width: 280px; margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; color: #1f2330; }
+  h1 { font-size: 14px; padding: 10px 12px; margin: 0; background: #3563ff; color: #fff; }
+  .section { padding: 8px 12px; border-bottom: 1px solid #eee; }
+  .row { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+  button {
+    flex: 1 1 calc(50% - 8px); appearance: none; border: 1px solid #d8dbe5; background: #fff; padding: 8px 10px; border-radius: 8px; cursor: pointer; font-size: 13px;
+  }
+  button.primary { background: #3563ff; border-color: #3563ff; color: #fff; }
+  .muted { color: #6b7080; font-size: 12px; }
+  .footer { padding: 8px 12px; display: flex; justify-content: space-between; align-items: center; }
+  a { color: #3563ff; cursor: pointer; font-size: 12px; }
+  .hint { margin-top: 6px; line-height: 1.6; }
+  .hint-title { font-weight: 600; color: #3b3f51; margin-bottom: 2px; }
+  .hint-row { display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap; }
+  .hint-row kbd { background: #eef0f6; padding: 1px 5px; border-radius: 4px; font-family: ui-monospace, monospace; font-size: 11px; color: #1f2330; }
+  .hint-tip { margin-top: 4px; color: #99a0b3; font-size: 11px; }
+
+</style>
+</head>
+<body>
+  <h1>QuizKing · 答题王</h1>
+  <div class="section">
+    <div class="row">
+      <button data-k="selection">抓取选区</button>
+      <button data-k="visible">抓取截图</button>
+      <button data-k="page">抓取整页</button>
+      <button data-k="toggle" class="primary">显示/隐藏气泡</button>
+    </div>
+    <div class="muted hint">
+      <div class="hint-title">快捷键（macOS 用 ⌘ 代替 Ctrl）</div>
+      <div class="hint-row"><kbd>Ctrl+Shift+Q</kbd> 抓取选区 — 先在页面选中文字</div>
+      <div class="hint-row"><kbd>Ctrl+Shift+E</kbd> 抓取截图 — 拖框裁剪后发给多模态 LLM</div>
+      <div class="hint-row"><kbd>Ctrl+Shift+P</kbd> 抓取整页 — 把 innerText 前 6000 字符发给 LLM</div>
+      <div class="hint-row"><kbd>Ctrl+Shift+H</kbd> 显示/隐藏气泡</div>
+      <div class="hint-tip">在 <code>chrome://extensions/shortcuts</code> 可改键。</div>
+    </div>
+  </div>
+  <div class="section">
+    <div class="muted" id="status">就绪。</div>
+  </div>
+  <div class="footer">
+    <a id="opts">设置</a>
+    <span class="muted" id="keyState"></span>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>

@@ -1,0 +1,175 @@
+/* QuizKing · 答题王 bubble styles - injected via manifest. Use a host id prefix to avoid collisions. */
+/* @license MIT */
+
+#aqh-root {
+  all: initial;
+  position: fixed;
+  z-index: 2147483647;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", Roboto, sans-serif;
+  color: #1f2330;
+}
+
+#aqh-bubble {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  width: 360px;
+  max-width: 60vw;
+  max-height: 60vh;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 14px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+#aqh-bubble.aqh-hide { display: none; }
+
+#aqh-header {
+  cursor: move;
+  background: linear-gradient(180deg, #f7f8fc 0%, #eef1f8 100%);
+  padding: 8px 10px;
+  display: flex;
+#aqh-title-glyph { display: inline-block; width: 22px; height: 22px; line-height: 22px; text-align: center; background: #3563ff; color: #fff; border-radius: 6px; margin-right: 8px; font-family: "PingFang SC","Microsoft YaHei",Heiti,sans-serif; font-weight: 700; font-size: 14px; }
+#aqh-title-text { font-weight: 600; }
+  align-items: center;
+  gap: 8px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  user-select: none;
+}
+#aqh-title {
+  font-weight: 600;
+  flex: 1;
+  font-size: 13px;
+  color: #3b3f51;
+}
+#aqh-actions { display: flex; gap: 4px; }
+#aqh-actions button {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 4px 8px;
+  color: #5b6273;
+  border-radius: 6px;
+}
+#aqh-actions button:hover { background: rgba(0, 0, 0, 0.06); }
+
+#aqh-body { padding: 10px 12px; overflow: auto; flex: 1; }
+
+.aqh-answer-label, .aqh-reasoning-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #6b7080;
+  margin: 4px 0 2px;
+}
+.aqh-answer-block {
+  background: #eaf3ff;
+  border: 1px solid #cfe1ff;
+  border-radius: 10px;
+  padding: 8px 10px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.aqh-reasoning-block {
+  background: #fafbff;
+  border: 1px solid #eef0f6;
+  border-radius: 10px;
+  padding: 8px 10px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.aqh-pre {
+  background: #f3f4f8;
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.aqh-err { color: #b3261e; }
+
+#aqh-status {
+  font-size: 12px;
+  color: #6b7080;
+  padding: 6px 10px;
+  border-top: 1px solid rgba(0, 0, 0, 0.05);
+  background: rgba(247, 248, 252, 0.7);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.aqh-spinner {
+  width: 12px; height: 12px;
+  border: 2px solid #b9c0d4;
+  border-top-color: #3563ff;
+  border-radius: 50%;
+  animation: aqh-spin 0.7s linear infinite;
+  display: inline-block;
+}
+@keyframes aqh-spin { to { transform: rotate(360deg); } }
+
+#aqh-fab {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  width: 44px; height: 44px;
+  border-radius: 50%;
+  background: #3563ff;
+  color: #fff;
+  border: 0;
+  cursor: pointer;
+  box-shadow: 0 8px 22px rgba(53, 99, 255, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  z-index: 2147483647;
+  opacity: 0.85;
+}
+#aqh-fab:hover { opacity: 1; }
+#aqh-fab.aqh-fab-expanded {
+  width: auto;
+  height: 40px;
+  border-radius: 999px;
+  padding: 0 6px;
+  gap: 6px;
+}
+.aqh-fab-btn {
+  appearance: none;
+  border: 0;
+  background: rgba(255,255,255,0.18);
+  color: #fff;
+  font-size: 12px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.aqh-fab-btn:hover { background: rgba(255,255,255,0.32); }
+
+.aqh-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.25);
+  z-index: 2147483646;
+  cursor: crosshair;
+}
+.aqh-mask-hint {
+  position: fixed;
+  left: 50%;
+  top: 12px;
+  transform: translateX(-50%);
+  background: rgba(0,0,0,0.72);
+  color: #fff;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  z-index: 2147483647;
+}

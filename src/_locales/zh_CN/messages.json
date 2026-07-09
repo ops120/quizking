@@ -1,0 +1,10 @@
+{
+  "extName": {
+    "message": "QuizKing · 答题王",
+    "description": "扩展名称"
+  },
+  "extDescription": {
+    "message": "把网页上的题目（截图 / 划词 / 整页 DOM）丢给 OpenAI 兼容 LLM，答案 / 解析吐回悬浮气泡。零上报，OpenAI / DeepSeek / 火山方舟 / Ollama 全部可接。",
+    "description": "扩展描述"
+  }
+}

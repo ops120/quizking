@@ -1,0 +1,40 @@
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Build artefacts
+dist/
+build/
+*.zip
+*.crx
+*.xpi
+
+# Tooling
+_icontools/
+
+# Local dev notes (not shipped — README covers user-facing surface)
+docs/
+*.bak
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors
+.vscode/
+.idea/
+*.iml
+
+# Secrets (do NOT commit)
+.env
+.env.local
+*.pem
+*.key
+
+# Logs
+*.log
