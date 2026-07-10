@@ -11,9 +11,6 @@ const FIELDS = [
   "saveHistory",
 ];
 
-const ANSWER_ONLY_PROMPT =
-  '你是一位严谨的解题助手。用户会给你一道题目（可能附文本和图片）。请直接给出最终答案，输出严格 JSON：{"answer":"..."}，不要任何额外文字、不要 markdown 代码块。answer 用最简洁的方式表达答案本身。';
-
 const REASONING_PROMPT =
   '你是一位严谨的解题助手。用户会给你网页上截取的一道题目（可能附文本和图片）。请仔细阅读，输出严格的 JSON：{"answer":"...", "reasoning":"..."}，不要任何额外文字、不要 markdown 代码块。answer 用最简洁的方式给出最终答案；reasoning 解释关键步骤（中文）。';
 
@@ -27,9 +24,10 @@ function load() {
     const t = (cfg.temperature === undefined ? 0.2 : cfg.temperature);
     $("temperature").value = t;
     $("tempV").textContent = Number(t).toFixed(1);
-    $("systemPrompt").value = cfg.systemPrompt || ANSWER_ONLY_PROMPT;
+    $("systemPrompt").value = cfg.systemPrompt || REASONING_PROMPT;
     $("reasoningPrompt").value = cfg.reasoningPrompt || REASONING_PROMPT;
-    const mode = cfg.promptMode || "answer";
+    // Migrate any pre-existing 'answer' mode users to 'reason' so the answer-only path is gone.
+    const mode = (cfg.promptMode === "answer" || !cfg.promptMode) ? "reason" : cfg.promptMode;
     const radio = document.querySelector('input[name="promptMode"][value="' + mode + '"]');
     if (radio) radio.checked = true;
     refreshPromptBoxes();
@@ -38,14 +36,13 @@ function load() {
 
 function refreshPromptBoxes() {
   const mode = getMode();
-  $("answerOnlyBox").style.display = (mode === "answer") ? "block" : "none";
   $("reasoningBox").style.display = (mode === "reason") ? "block" : "none";
   $("customBox").style.display = (mode === "custom") ? "block" : "none";
 }
 
 function getMode() {
   const r = document.querySelector('input[name="promptMode"]:checked');
-  return r ? r.value : "answer";
+  return r ? r.value : "reason";
 }
 let dirty = false;
 

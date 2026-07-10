@@ -22,8 +22,8 @@ const DEFAULTS = {
   temperature: 0.2,
   bubbleOpacity: 0.95,
   systemPrompt:
-    "你是一位严谨的解题助手。用户会给你一道题目（可能附文本和图片）。请直接给出最终答案，输出严格 JSON：{\"answer\":\"...\"}，不要任何额外文字、不要 markdown 代码块。answer 用最简洁的方式表达答案本身。",
-  promptMode: "answer",
+    "你是一位严谨的解题助手。用户会给你网页上截取的一道题目（可能附文本和图片）。请仔细阅读，输出严格的 JSON：{\"answer\":\"...\", \"reasoning\":\"...\"}，不要任何额外文字、不要 markdown 代码块。answer 用最简洁的方式给出最终答案；reasoning 解释关键步骤（中文）。",
+  promptMode: "reason",
   reasoningPrompt:
     "你是一位严谨的解题助手。用户会给你网页上截取的一道题目（可能附文本和图片）。请仔细阅读，输出严格的 JSON：{\"answer\":\"...\", \"reasoning\":\"...\"}，不要任何额外文字、不要 markdown 代码块。answer 用最简洁的方式给出最终答案；reasoning 解释关键步骤（中文）。",
   saveHistory: true,
@@ -34,9 +34,13 @@ function ensureDefaults() {
     chrome.storage.sync.get(Object.keys(DEFAULTS), (cur) => {
       const patch = {};
       for (const k of Object.keys(DEFAULTS)) {
+        // Migrate stale "answer" mode to "reason" so the answer-only path is gone.
+        if (k === "promptMode" && cur.promptMode === "answer") {
+          patch.promptMode = "reason";
+          continue;
+        }
         if (cur[k] === undefined) patch[k] = DEFAULTS[k];
       }
-      if (Object.keys(patch).length) chrome.storage.sync.set(patch);
       if (Object.keys(patch).length) chrome.storage.sync.set(patch);
       resolve({ ...DEFAULTS, ...cur, ...patch });
     });
@@ -45,13 +49,11 @@ function ensureDefaults() {
 
 function pickSystemPrompt(cfg) {
   // Modes:
-  //   "answer" — minimal: just the answer. Default.
-  //   "reason" — answer + reasoning (verbose).
+  //   "reason" — answer + reasoning (default).
   //   "custom" — user-typed systemPrompt verbatim.
-  const mode = cfg.promptMode || "answer";
+  const mode = cfg.promptMode || "reason";
   if (mode === "custom") return cfg.systemPrompt || DEFAULTS.systemPrompt;
-  if (mode === "reason") return cfg.reasoningPrompt || DEFAULTS.reasoningPrompt;
-  return cfg.systemPrompt || DEFAULTS.systemPrompt;
+  return cfg.reasoningPrompt || DEFAULTS.reasoningPrompt;
 }
 
 function getActiveTab() {
@@ -136,6 +138,9 @@ async function askLLM(payload) {
 }
 
 function parseAnswer(raw) {
+  // If broken, restore the old regex:
+  //   /\{[^{}]*"answer"[^{}]*"reasoning"[\s\S]*?\}/
+
   let answer = "";
   let reasoning = "";
   let text = (raw || "").trim();
@@ -143,10 +148,12 @@ function parseAnswer(raw) {
   // 1) remove ︎...︎ and any <tag>...</tag> traces (ml models often leak their scratchpad)
   text = text.replace(/<\/?[\w\u4e00-\u9fa5]+>/g, " ").replace(/\s+\n/g, "\n").trim();
 
-  // 1b) If still no JSON-looking text, harvest the first {"answer"-style object out of the blob.
-  const jsonSlice = text.match(/\{[^{}]*"answer"[^{}]*"reasoning"[\s\S]*?\}/);
+  // 1b) Harvest the first {"answer": ...}-style object out of the blob.
+  //     Works for both answer-only mode and answer+reasoning mode, even when the model wraps it in prose or a ︎ block.
+  //     The object is non-nested (no curly braces inside string values), so the [^{}] restriction is safe.
+  const jsonSlice = text.match(/\{[^{}]*?"answer"\s*:\s*"[\s\S]*?"\s*[^{}]*?\}/);
   if (jsonSlice) text = jsonSlice[0];
-    try { console.log("[aqh-bg] parseAnswer raw len=", (raw||"").length, "slice?", !!jsonSlice); } catch {}
+  try { console.log("[aqh-bg] parseAnswer raw len=", (raw||"").length, "slice?", !!jsonSlice); } catch {}
   try {
     const obj = JSON.parse(text);
     answer = (obj.answer ?? "").toString().trim();

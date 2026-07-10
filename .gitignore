@@ -38,3 +38,7 @@ Thumbs.db
 
 # Logs
 *.log
+STATUS.md
+
+# Backups
+.backup/

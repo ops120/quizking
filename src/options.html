@@ -33,17 +33,10 @@
 
   <section>
     <h2>Prompt 模式</h2>
-    <p class="muted">默认「只要答案」。想要解题步骤时切换到「答案 + 解析」或自定义。</p>
+    <p class="muted">默认「答案 + 解析」，可换「自定义」。</p>
     <label class="chk">
-      <input type="radio" name="promptMode" value="answer" checked />
-      只要答案（默认）
-    </label>
-    <div id="answerOnlyBox" class="promptBox">
-      <div class="muted">仅一条 system prompt，强制模型只输出 <code>{"answer":"..."}</code>。适合快速做题。</div>
-    </div>
-    <label class="chk">
-      <input type="radio" name="promptMode" value="reason" />
-      答案 + 解析
+      <input type="radio" name="promptMode" value="reason" checked />
+      答案 + 解析（默认）
     </label>
     <div id="reasoningBox" class="promptBox">
       <label class="inner">解析 Prompt（输出包含 reasoning 字段）
