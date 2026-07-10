@@ -26,6 +26,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Brand rename: `AI Quiz Helper` → `QuizKing · 答题王`. Internal protocol namespace `aqh/*` is preserved for stability.
 - Icon: solid blue square with white 王 glyph.
+- **Removed "只要答案" prompt mode.** The default is now "答案 + 解析" only. Users with the old `promptMode: "answer"` setting are auto-migrated to `reason` on next load. `parseAnswer` regex is now tolerant of whitespace and prose-wrapped JSON.
+- **Marked `Ctrl+Shift+P` (抓取整页 DOM 文本) as experimental.** Long pages can spike token use and latency. Popup button, manifest command description, and README all show a ⚠ badge.
+
+### Fixed
+- `parseAnswer` no longer mistakes the first line of a model's scratchpad for the answer when the model returns JSON wrapped in prose or a `<think>` block.
 
 ### Documentation
 - New top-level files: `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`, `FAQ.md`.

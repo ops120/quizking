@@ -38,7 +38,7 @@
     },
     "capture-page": {
       "suggested_key": { "default": "Ctrl+Shift+P", "mac": "Command+Shift+P" },
-      "description": "抓取整页可读文本（document.innerText 前 6000 字符）"
+      "description": "[实验] 抓取整页可读文本（document.innerText 前 6000 字符）。长页面会显著增加 token 消耗与延迟。"
     },
     "toggle-bubble": {
       "suggested_key": { "default": "Ctrl+Shift+H", "mac": "Command+Shift+H" },
