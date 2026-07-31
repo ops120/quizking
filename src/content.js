@@ -375,6 +375,13 @@
     setStatus(answer ? "完成。" : "完成（模型未返回结构化输出，已展示原始文本）。");
   }
 
+  function toggleFab() {
+    const existing = document.getElementById("aqh-fab");
+    if (existing) { existing.remove(); return false; }
+    ensureFab();
+    return true;
+  }
+
   function ensureFab() {
     let fab = document.getElementById("aqh-fab");
     if (fab) return fab;
@@ -427,9 +434,8 @@
 
   async function handleTrigger(kind) {
     if (kind === "toggle") {
-      const b = document.getElementById("aqh-bubble");
-      if (b) b.classList.toggle("aqh-hide");
-      else renderBubble('<div class="aqh-pre">气泡</div>', { status: "已展开" });
+      // Toggle the 王字 FAB (default hidden, click to summon).
+      toggleFab();
       return;
     }
     try {
@@ -469,6 +475,10 @@
       closeBubble();
       return sendResponse({ ok: true });
     }
+    if (msg.type === "aqh/show-fab") {
+      const shown = toggleFab();
+      return sendResponse({ ok: true, shown });
+    }
     if (msg.type === "aqh/ping") {
       sendResponse({ ok: true });
     }
@@ -478,6 +488,6 @@
     cfg = ((await callBg("aqh/get-config")) || {}).cfg || null;
     if (cfg && cfg.promptMode) promptMode = cfg.promptMode;
     log("boot promptMode=", promptMode);
-    ensureFab();
+    // FAB is hidden by default; user summons it via popup / shortcut / right-click.
   })();
 })();

@@ -71,6 +71,28 @@ kbd { background: #eef0f6; padding: 2px 6px; border-radius: 6px; font-family: ui
 .history:empty::before { content: "(暂无历史)"; color: #99a0b3; font-size: 12px; }
 .history .item { padding: 6px 0; border-bottom: 1px dashed #eaeaf2; font-size: 12.5px; }
 .history .item:last-child { border-bottom: 0; }
+section.about-hero {
+  background: linear-gradient(180deg, #f0f4ff 0%, #e8eeff 100%);
+  border-color: #cfe1ff;
+}
+section.about-hero .about-line {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-size: 14px;
+  color: #1f2330;
+}
+section.about-hero .about-star { font-size: 16px; }
+section.about-hero .about-sep { color: #99a0b3; }
+section.about-hero .about-sub { margin: 4px 0 0; }
+section.about-hero .gh-link {
+  color: #3563ff;
+  text-decoration: none;
+  font-weight: 500;
+}
+section.about-hero .gh-link:hover { text-decoration: underline; }
 footer {
   position: sticky;
   bottom: 0;
