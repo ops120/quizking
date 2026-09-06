@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Default blue-square icon with a 王 glyph (simplified Chinese for "king").
 - Dirty-state indicator on the options page: any field edit highlights `● 有未保存的修改` until 保存 is clicked. `beforeunload` warns on dirty tab close.
 - Detailed keyboard descriptions in `chrome://extensions/shortcuts` (used to say only "抓取当前选区"; now spells out what each command does and when to use it).
+- Low-opacity blending: below 0.8 the bubble progressively desaturates, the title row (王 glyph + "QuizKing · 答题王") fades out completely, and other saturated accents (primary buttons) fade faster than the bubble itself, so at the 0.4 floor it blends into the page instead of leaving coloured hotspots.
 
 ### Changed
 - Brand rename: `AI Quiz Helper` → `QuizKing · 答题王`. Internal protocol namespace `aqh/*` is preserved for stability.
@@ -31,10 +32,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - `parseAnswer` no longer mistakes the first line of a model's scratchpad for the answer when the model returns JSON wrapped in prose or a `<think>` block.
+- The options page restores the saved `bubbleOpacity` and `saveHistory` on load (previously the slider always showed the default and saving any other setting silently reset them), and an open bubble live-applies opacity changes via `chrome.storage.onChanged`.
 
 ### Documentation
 - New top-level files: `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`, `FAQ.md`.
 - README expanded with Quick Start, FAQ link, Contributing link, manifest permission table, file tree.
+- README gained a 气泡透明度 subsection with before/after screenshots of the low-opacity page-blending behaviour.
 
 ### Security
 - API key stored in `chrome.storage.sync` only; never sent to content scripts (sanitised cfg).

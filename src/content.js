@@ -40,7 +40,9 @@
   }
 
   function getCssOpacity() {
-    return Number((cfg && cfg.bubbleOpacity) ?? 0.95);
+    const v = Number((cfg && cfg.bubbleOpacity) ?? 0.95);
+    if (!Number.isFinite(v)) return 0.95;
+    return Math.min(1, Math.max(0.4, v));
   }
 
   function escapeHtml(s) {
@@ -57,7 +59,7 @@
     root.innerHTML = "";
     const wrap = document.createElement("div");
     wrap.id = "aqh-bubble";
-    wrap.style.opacity = String(getCssOpacity());
+    wrap.style.setProperty("--aqh-o", String(getCssOpacity()));
     if (opts.hidden) wrap.classList.add("aqh-hide");
     wrap.innerHTML =
       '<div id="aqh-header">' +
@@ -280,7 +282,7 @@
       renderBubble(
         '<div class="aqh-err">未配置 API Key。</div>' +
         '<div style="margin-top:8px">' +
-          '<button id="aqh-openopts" style="appearance:none;border:0;background:#3563ff;color:#fff;padding:6px 12px;border-radius:8px;cursor:pointer">打开设置</button>' +
+          '<button id="aqh-openopts" class="aqh-btn-primary">打开设置</button>' +
         '</div>',
         { status: "需要先在选项页填写 API Key" }
       );
@@ -482,6 +484,17 @@
     if (msg.type === "aqh/ping") {
       sendResponse({ ok: true });
     }
+  });
+
+  // Live-apply opacity changes (e.g. saved from the options page) to any open bubble.
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== "sync" || !changes.bubbleOpacity) return;
+    const v = Number(changes.bubbleOpacity.newValue);
+    if (!Number.isFinite(v)) return;
+    if (!cfg) cfg = {};
+    cfg.bubbleOpacity = v;
+    const bubble = document.getElementById("aqh-bubble");
+    if (bubble) bubble.style.setProperty("--aqh-o", String(getCssOpacity()));
   });
 
   (async () => {

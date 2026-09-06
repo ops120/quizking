@@ -26,6 +26,9 @@ function load() {
     $("tempV").textContent = Number(t).toFixed(1);
     $("systemPrompt").value = cfg.systemPrompt || REASONING_PROMPT;
     $("reasoningPrompt").value = cfg.reasoningPrompt || REASONING_PROMPT;
+    $("bubbleOpacity").value = (cfg.bubbleOpacity === undefined ? 0.95 : cfg.bubbleOpacity);
+    $("opaV").textContent = Number($("bubbleOpacity").value).toFixed(2);
+    $("saveHistory").checked = (cfg.saveHistory === undefined ? true : !!cfg.saveHistory);
     // Migrate any pre-existing 'answer' mode users to 'reason' so the answer-only path is gone.
     const mode = (cfg.promptMode === "answer" || !cfg.promptMode) ? "reason" : cfg.promptMode;
     const radio = document.querySelector('input[name="promptMode"][value="' + mode + '"]');

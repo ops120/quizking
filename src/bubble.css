@@ -25,7 +25,36 @@
   flex-direction: column;
   font-size: 14px;
   line-height: 1.5;
+  opacity: var(--aqh-o, 0.95);
+  /* The lower the opacity, the greyer the bubble: full colour at >= 0.8,
+     fully desaturated at the 0.4 floor so it blends into the page. */
+  filter: saturate(clamp(0, (var(--aqh-o, 0.95) - 0.4) / 0.4, 1));
 }
+
+/* Saturated accents (王 glyph, primary buttons) fade faster than the bubble
+   itself so no coloured hotspot remains at low opacity. */
+#aqh-title-glyph,
+.aqh-btn-primary {
+  opacity: clamp(0.3, (var(--aqh-o, 0.95) - 0.4) / 0.4, 1);
+}
+
+/* The title row (王 glyph + "QuizKing · 答题王") fades out completely,
+   vanishing at the 0.4 floor — branding blends away first. The header stays
+   as the drag handle and keeps the ⚙/—/✕ buttons. */
+#aqh-title {
+  opacity: clamp(0, (var(--aqh-o, 0.95) - 0.4) / 0.4, 1);
+}
+
+.aqh-btn-primary {
+  appearance: none;
+  border: 0;
+  background: #3563ff;
+  color: #fff;
+  padding: 6px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.aqh-btn-primary:hover { filter: brightness(1.08); }
 
 #aqh-bubble.aqh-hide { display: none; }
 
