@@ -116,6 +116,10 @@
 
 ![快捷键说明](assets/screenshots/shortcuts.png)
 
+**快捷键没反应？** 常见原因是默认组合键在注册时被其他扩展占用（Chrome 会静默跳过，在设置页显示「未设置」），或被输入法 / 常驻软件全局抢占。打开 `chrome://extensions/shortcuts`，点击对应命令右侧的快捷键输入框，直接按下想用的组合键即可，修改即时生效，无需重载扩展：
+
+![在 chrome://extensions/shortcuts 重新绑定快捷键](assets/screenshots/修改快捷键.png)
+
 **其他触发方式**
 
 - 页面右下角悬浮「王」字按钮 → 鼠标悬停展开「选区 / 截图 / 整页 / 气泡」

@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Documentation
+- README 使用 section gained a 「快捷键没反应？」 troubleshooting note: rebind the command in `chrome://extensions/shortcuts` (Chrome silently skips default keys taken by other extensions), with a walkthrough screenshot.
+
 ## [0.2.0] - 2026-09-06
 
 > Author: <https://space.bilibili.com/97727630>
