@@ -115,7 +115,7 @@
 
 ```js
 chrome.runtime.sendMessage({ type: "aqh/selftest" })
-//  →  { ok: true, cfg: DEFAULTS (sanitized), manifest: "0.1.0", routes: [...] }
+//  →  { ok: true, cfg: DEFAULTS (sanitized), manifest: "0.2.0", routes: [...] }
 ```
 
 目的：

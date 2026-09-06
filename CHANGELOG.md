@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-06
+
 > Author: <https://space.bilibili.com/97727630>
 > Thanks: <https://linux.do/>
 
@@ -54,5 +56,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Icons (16/48/128) generated from a single SVG.
 - README screenshots under `assets/screenshots/`: install / config / shortcuts.
 
-[Unreleased]: https://example.com/ai-quiz-helper/compare/v0.1.0...HEAD
-[0.1.0]: https://example.com/ai-quiz-helper/releases/tag/v0.1.0
+[Unreleased]: https://github.com/ops120/quizking/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/ops120/quizking/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/ops120/quizking/releases/tag/v0.1.0
