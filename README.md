@@ -9,7 +9,7 @@
 [![Manifest V3](https://img.shields.io/badge/manifest-V3-3563ff)](#技术栈)
 [![Chrome 114+](https://img.shields.io/badge/chrome-114%2B-4285f4)](#安装)
 [![No telemetry](https://img.shields.io/badge/telemetry-none-2ea44f)](#隐私与安全)
-[![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](./CONTRIBUTING.md)
+[![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](../../pulls)
 [![Bilibili](https://img.shields.io/badge/B站-97727630-00aeec?logo=bilibili&logoColor=white)](https://space.bilibili.com/97727630)
 
 </div>
@@ -149,8 +149,6 @@
 - 选中文字 → 右键 → 「抓取选区并问 AI」 / 「抓取可见区域并问 AI」 / 「抓取整页 DOM 文本并问 AI」 / 「关闭当前 AI 气泡」
 - 工具栏图标 → 弹 popup → 四个按钮（含详细快捷键说明）
 
-**手测脚本**：[`src/dev/CHECK.md`](src/dev/CHECK.md) 5 分钟冒烟。
-
 ## 架构
 
 ```
@@ -192,17 +190,13 @@ QuizKing/
 │  ├─ popup.html / popup.js
 │  ├─ options.html / options.css / options.js
 │  ├─ _locales/zh_CN/messages.json
-│  ├─ icons/                      # 16 / 48 / 128 王字 PNG
-│  └─ dev/CHECK.md                # 5 分钟手测脚本
+│  └─ icons/                      # 16 / 48 / 128 王字 PNG
 ├─ .github/
 │  ├─ ISSUE_TEMPLATE/             # bug / feature 模板
 │  └─ PULL_REQUEST_TEMPLATE.md
-docs/                             # 本地开发日志（已在 .gitignore）
+docs/  .doc/                      # 本地文档（已在 .gitignore，不随仓库发布）
 ├─ .editorconfig
 ├─ .gitignore
-├─ CHANGELOG.md
-├─ CODE_OF_CONDUCT.md
-├─ CONTRIBUTING.md
 ├─ FAQ.md
 ├─ LICENSE
 ├─ README.md
@@ -323,15 +317,13 @@ const svg = fs.readFileSync('src/icons/icon.svg');
 
 ## 贡献
 
-详见 [CONTRIBUTING.md](./CONTRIBUTING.md)。要点：
+欢迎 fork & PR：
 
 1. Fork & 创建分支
 2. `node --check src/*.js` 通过
-3. 走一遍 [`src/dev/CHECK.md`](src/dev/CHECK.md)
+3. 自测：在 `chrome://extensions` 重载扩展后，用「划词 / 截图 / 整页」三条通道各抓一题，确认气泡出答案
 4. 提 PR，附带：改了什么 / 为什么 / 怎么验证 / 风险点
 5. 维护者审 → 合入
-
-行为准则：[CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md)
 
 ## 作者
 

@@ -17,6 +17,8 @@ _icontools/
 
 # Local dev notes (not shipped — README covers user-facing surface)
 docs/
+.doc/
+.zcode/
 *.bak
 *.swp
 *.swo

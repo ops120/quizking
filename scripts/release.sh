@@ -42,7 +42,7 @@ git commit -m "Initial commit: QuizKing · 答题王 v0.1.0
 - Triggers: keyboard shortcuts, context menu, FAB, popup
 - Local history (last 200), dirty-state guard on options page
 - Zero telemetry, API key never leaves the background worker
-- MIT licensed; see CONTRIBUTING.md / CODE_OF_CONDUCT.md / SECURITY.md / FAQ.md"
+- MIT licensed; see SECURITY.md / FAQ.md"
 
 echo "✓ initial commit created"
 
