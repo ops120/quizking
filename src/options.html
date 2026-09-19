@@ -25,22 +25,16 @@
 
   <section>
     <h2>LLM 连接</h2>
-    <label>Endpoint（不含 <code>/chat/completions</code>）
-      <input id="endpoint" type="text" placeholder="https://api.openai.com/v1" />
-    </label>
-    <label>API Key
-      <input id="apiKey" type="password" placeholder="sk-..." />
-    </label>
-    <label>Model
-      <input id="model" type="text" placeholder="gpt-4o-mini" />
-    </label>
-    <label>Temperature <span id="tempV">0.2</span>
-      <input id="temperature" type="range" min="0" max="2" step="0.1" />
-    </label>
+    <p class="muted">可添加多个服务商：抓题时并行调用，气泡里并列展示各自答案并标记是否一致。只启用一个时，气泡显示与原来一致。</p>
+    <div id="providers" class="providers"></div>
     <div class="row">
-      <button id="testBtn" class="primary">测试连接</button>
+      <button id="addProvider" type="button">＋ 添加服务商</button>
+      <button id="testBtn" class="primary" type="button">测试全部</button>
       <span id="testRes" class="muted"></span>
     </div>
+    <label>Temperature（所有服务商共用）<span id="tempV">0.2</span>
+      <input id="temperature" type="range" min="0" max="2" step="0.1" />
+    </label>
   </section>
 
   <section>

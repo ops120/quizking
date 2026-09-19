@@ -15,10 +15,16 @@ const MENU_IDS = {
   close: "aqh-close-bubble",
 };
 
-const DEFAULTS = {
+// Per-provider fallbacks. The user manages a list of these in options.html.
+const PROVIDER_DEFAULTS = {
   endpoint: "https://api.openai.com/v1",
-  apiKey: "",
   model: "gpt-4o-mini",
+};
+
+// Legacy keys (endpoint / apiKey / model) are read once for migration only.
+const LEGACY_KEYS = ["endpoint", "apiKey", "model"];
+
+const DEFAULTS = {
   temperature: 0.2,
   bubbleOpacity: 0.95,
   systemPrompt:
@@ -29,9 +35,25 @@ const DEFAULTS = {
   saveHistory: true,
 };
 
+function normalizeProvider(p, i) {
+  const src = p || {};
+  const label = String(src.label || "").trim();
+  const endpoint = String(src.endpoint || "").trim();
+  const model = String(src.model || "").trim();
+  return {
+    id: String(src.id || ("p" + (i + 1))),
+    label: label || ("服务商 " + (i + 1)),
+    endpoint: endpoint || PROVIDER_DEFAULTS.endpoint,
+    apiKey: String(src.apiKey || ""),
+    model: model || PROVIDER_DEFAULTS.model,
+    enabled: src.enabled !== false,
+  };
+}
+
 function ensureDefaults() {
   return new Promise((resolve) => {
-    chrome.storage.sync.get(Object.keys(DEFAULTS), (cur) => {
+    const keys = Object.keys(DEFAULTS).concat(["providers"], LEGACY_KEYS);
+    chrome.storage.sync.get(keys, (cur) => {
       const patch = {};
       for (const k of Object.keys(DEFAULTS)) {
         // Migrate stale "answer" mode to "reason" so the answer-only path is gone.
@@ -41,10 +63,25 @@ function ensureDefaults() {
         }
         if (cur[k] === undefined) patch[k] = DEFAULTS[k];
       }
+      let providers;
+      if (Array.isArray(cur.providers)) {
+        providers = cur.providers.map(normalizeProvider);
+      } else {
+        // One-time migration from the single-endpoint layout.
+        const hasLegacy = LEGACY_KEYS.some((k) => cur[k]);
+        providers = hasLegacy
+          ? [normalizeProvider({ id: "p1", label: "默认", endpoint: cur.endpoint, apiKey: cur.apiKey, model: cur.model }, 0)]
+          : [];
+        patch.providers = providers;
+      }
       if (Object.keys(patch).length) chrome.storage.sync.set(patch);
-      resolve({ ...DEFAULTS, ...cur, ...patch });
+      resolve({ ...DEFAULTS, ...cur, ...patch, providers });
     });
   });
+}
+
+function activeProviders(cfg) {
+  return (cfg.providers || []).filter((p) => p.enabled && p.apiKey);
 }
 
 function pickSystemPrompt(cfg) {
@@ -97,13 +134,15 @@ async function captureVisibleToBase64(tab) {
   });
 }
 
-async function askLLM(payload) {
-  // payload = { mode: 'image'|'text', text?: string, imageDataUrl?: string }
-  const cfg = await ensureDefaults();
-  if (!cfg.apiKey) {
-    throw new Error("未配置 API Key，请先在选项页填写。");
-  }
-  const url = (cfg.endpoint || DEFAULTS.endpoint).replace(/\/$/, "") + "/chat/completions";
+// A hung endpoint would otherwise leave the bubble waiting forever.
+const REQUEST_TIMEOUT_MS = 45000;
+
+function timeoutError() {
+  return new Error("超时（" + Math.round(REQUEST_TIMEOUT_MS / 1000) + "s 无响应）");
+}
+
+async function callProvider(provider, payload, cfg) {
+  const url = (provider.endpoint || PROVIDER_DEFAULTS.endpoint).replace(/\/$/, "") + "/chat/completions";
   const userContent = [];
   if (payload.text) userContent.push({ type: "text", text: payload.text });
   if (payload.imageDataUrl) {
@@ -113,28 +152,85 @@ async function askLLM(payload) {
     });
   }
   const body = {
-    model: cfg.model || DEFAULTS.model,
+    model: provider.model || PROVIDER_DEFAULTS.model,
     temperature: Number(cfg.temperature ?? DEFAULTS.temperature),
     messages: [
       { role: "system", content: pickSystemPrompt(cfg) },
       { role: "user", content: userContent.length ? userContent : [{ type: "text", text: "" }] },
     ],
   };
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: "Bearer " + cfg.apiKey,
-    },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    const txt = await res.text().catch(() => "");
-    throw new Error("LLM HTTP " + res.status + " " + (txt || "").slice(0, 200));
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer " + provider.apiKey,
+      },
+      body: JSON.stringify(body),
+      signal: ctrl.signal,
+    });
+    if (!res.ok) {
+      const txt = await res.text().catch(() => "");
+      throw new Error("HTTP " + res.status + " " + (txt || "").slice(0, 120));
+    }
+    const data = await res.json();
+    const raw = data?.choices?.[0]?.message?.content ?? "";
+    return parseAnswer(raw);
+  } catch (e) {
+    if (e && e.name === "AbortError") throw timeoutError();
+    throw e;
+  } finally {
+    clearTimeout(timer);
   }
-  const data = await res.json();
-  const raw = data?.choices?.[0]?.message?.content ?? "";
-  return parseAnswer(raw);
+}
+
+async function askAll(payload, onItem) {
+  // Fan out to every enabled provider in parallel; each result is reported the
+  // moment it lands so the bubble can fill in progressively. One failure never
+  // blocks the rest.
+  const cfg = await ensureDefaults();
+  const active = activeProviders(cfg);
+  if (!active.length) {
+    throw new Error(
+      (cfg.providers || []).length
+        ? "没有已启用且填了 API Key 的服务商，请在选项页检查。"
+        : "未配置任何服务商，请先在选项页添加。"
+    );
+  }
+  const items = new Array(active.length);
+  await Promise.all(
+    active.map(async (p, i) => {
+      let item;
+      try {
+        const t0 = Date.now();
+        const r = await callProvider(p, payload, cfg);
+        item = {
+          id: p.id,
+          label: p.label,
+          model: p.model,
+          ok: true,
+          answer: r.answer,
+          reasoning: r.reasoning,
+          raw: r.raw,
+          ms: Date.now() - t0,
+        };
+      } catch (e) {
+        item = {
+          id: p.id,
+          label: p.label,
+          model: p.model,
+          ok: false,
+          error: (e && e.message) || String(e),
+          ms: null,
+        };
+      }
+      items[i] = item;
+      if (onItem) { try { onItem(item); } catch (e) { void e; } }
+    })
+  );
+  return { cfg, active, items };
 }
 
 function parseAnswer(raw) {
@@ -172,12 +268,51 @@ function parseAnswer(raw) {
   return { answer, reasoning, raw };
 }
 
-async function saveHistory(entry) {
+function newReqId() {
+  return "r" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+}
+
+function pushToTab(tabId, type, payload) {
+  if (tabId === undefined || tabId === null) return;
+  try {
+    // Callback form so a closed tab surfaces as lastError instead of a throw.
+    chrome.tabs.sendMessage(tabId, { type, payload }, () => { void chrome.runtime.lastError; });
+  } catch (e) { void e; }
+}
+
+async function runAsk({ reqId, tabId, payload, cfg, active, promptMode }) {
+  let items;
+  try {
+    const settled = await askAll(payload, (item) => {
+      pushToTab(tabId, "aqh/ask-item", { reqId, item });
+    });
+    items = settled.items;
+  } catch (e) {
+    const msg = (e && e.message) || String(e);
+    items = active.map((p) => ({ id: p.id, label: p.label, model: p.model, ok: false, error: msg, ms: null }));
+  }
+  pushToTab(tabId, "aqh/ask-finish", { reqId, items, promptMode });
+  await saveHistoryMany(
+    items.filter((it) => it.ok).map((it) => ({
+      ts: Date.now(),
+      mode: payload.mode || "text",
+      question: payload.text || "(image)",
+      provider: it.label,
+      answer: it.answer,
+      reasoning: it.reasoning,
+      model: it.model,
+    }))
+  );
+}
+
+async function saveHistoryMany(entries) {
+  // One read + one write for the whole batch: parallel single writes would clobber each other.
+  if (!entries.length) return;
   const cfg = await ensureDefaults();
   if (!cfg.saveHistory) return;
   return new Promise((resolve) => {
     chrome.storage.local.get({ history: [] }, (cur) => {
-      const list = [entry, ...(cur.history || [])].slice(0, 200);
+      const list = [...entries, ...(cur.history || [])].slice(0, 200);
       chrome.storage.local.set({ history: list }, () => resolve());
     });
   });
@@ -242,17 +377,28 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         return sendResponse({ ok: true, dataUrl });
       }
       if (msg.type === "aqh/ask") {
+        const payload = msg.payload || {};
+        const tabId = sender.tab && sender.tab.id;
         const cfg = await ensureDefaults();
-        const result = await askLLM(msg.payload || {});
-        await saveHistory({
-          ts: Date.now(),
-          mode: msg.payload?.mode || "text",
-          question: msg.payload?.text || "(image)",
-          answer: result.answer,
-          reasoning: result.reasoning,
-          model: cfg.model,
+        const active = activeProviders(cfg);
+        if (!active.length) {
+          return sendResponse({
+            ok: false,
+            error: (cfg.providers || []).length
+              ? "没有已启用且填了 API Key 的服务商，请在选项页检查。"
+              : "未配置任何服务商，请先在选项页添加。",
+          });
+        }
+        const reqId = newReqId();
+        const promptMode = cfg.promptMode || "reason";
+        // Reply right away with the roster so the bubble can draw one pending
+        // card per provider, then stream each answer in as it arrives.
+        sendResponse({
+          ok: true,
+          result: { reqId, pending: active.map((p) => ({ id: p.id, label: p.label, model: p.model })), promptMode },
         });
-        return sendResponse({ ok: true, result: { ...result, promptMode: cfg.promptMode || "answer" } });
+        runAsk({ reqId, tabId, payload, cfg, active, promptMode });
+        return true;
       }
       if (msg.type === "aqh/selftest" && self.__AQH_SELFTEST__) {
         const cfg = await ensureDefaults();
@@ -265,7 +411,13 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       }
       if (msg.type === "aqh/test") {
         const cfg = await ensureDefaults();
-        return sendResponse({ ok: true, cfg: sanitizeCfg(cfg), hasKey: !!cfg.apiKey });
+        const safe = sanitizeCfg(cfg);
+        return sendResponse({
+          ok: true,
+          cfg: safe,
+          hasKey: safe.hasKey,
+          providerCount: safe.providers.filter((p) => p.enabled).length,
+        });
       }
       return sendResponse({ ok: false, error: "unknown" });
     } catch (e) {
@@ -276,7 +428,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 });
 
 function sanitizeCfg(cfg) {
-  // content 不需要 apiKey，回传时去掉
-  const { apiKey, ...rest } = cfg;
-  return { ...rest, hasKey: !!apiKey };
+  // content 不需要 apiKey：逐条剥离，并把旧的单服务商字段整体剔除。
+  const { apiKey, endpoint, model, providers, ...rest } = cfg;
+  const safeProviders = (providers || []).map(({ apiKey: key, ...p }) => ({ ...p, hasKey: !!key }));
+  return {
+    ...rest,
+    providers: safeProviders,
+    hasKey: safeProviders.some((p) => p.enabled && p.hasKey),
+  };
 }

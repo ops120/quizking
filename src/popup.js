@@ -25,7 +25,10 @@ document.addEventListener("DOMContentLoaded", () => {
       $("status").textContent = "插件暂未就绪";
       return;
     }
-    $("keyState").textContent = res.hasKey ? "API Key ✓" : "未配置 API Key";
+    const n = res.providerCount || 0;
+    $("keyState").textContent = res.hasKey
+      ? ("API Key ✓" + (n > 1 ? (" · " + n + " 个服务商") : ""))
+      : "未配置 API Key";
   });
 });
 

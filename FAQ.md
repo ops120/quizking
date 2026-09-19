@@ -8,12 +8,21 @@
 A: 检查 `chrome://extensions/` 是否有红色错误条。最常见：`src/_locales/zh_CN/messages.json` 缺失或 `manifest.json` JSON 损坏。重新加载一次即可。
 
 **Q: 卸载后我的数据还在吗？**
-A: 卸载扩展会清掉 `chrome.storage.sync` 里的配置（endpoint / key / model / prompt）。`chrome.storage.local` 里的历史记录也会清（Chrome 卸载扩展的默认行为）。备份靠你自己导出。
+A: 卸载扩展会清掉 `chrome.storage.sync` 里的配置（服务商列表 endpoint / key / model、prompt 等）。`chrome.storage.local` 里的历史记录也会清（Chrome 卸载扩展的默认行为）。备份靠你自己导出。
 
 ## 配置
 
 **Q: 我可以接 DeepSeek / 火山方舟 / Ollama 吗？**
 A: 任何 OpenAI 兼容的 `/v1/chat/completions` endpoint 都可以。Endpoint 填 base URL，**不要**带 `/chat/completions` 后缀，代码自动拼。
+
+**Q: 能同时用多个 API 对比答案吗？**
+A: 能。选项页「LLM 连接」→「＋ 添加服务商」，每个服务商填自己的 Endpoint / Key / Model 并勾选「启用」。抓题时会**同时**发给所有启用的服务商（真并发，总耗时约等于最慢的那个），气泡里并列展示各自答案并标记是否一致。想临时停用某个，取消它的「启用」勾选即可（不必删除配置）。
+
+**Q: 多服务商里有一个报错，会连累其他吗？**
+A: 不会。失败的那个显示为红色卡片并附原因（如 `HTTP 401`），其余答案照常展示。全部失败时气泡只显示错误卡片。
+
+**Q: 图片题发给不支持视觉的模型会怎样？**
+A: 截图/图片会发给**所有**启用的服务商。不支持视觉的模型会返回错误，显示为该服务商的失败卡片。若不想浪费调用，可只为视觉模型单独建一个服务商，做题时按需勾选启用。
 
 **Q: 截图通道要什么模型？**
 A: 多模态模型。OpenAI `gpt-4o-mini` / `gpt-4o`、DeepSeek 暂无视觉、火山 `doubao-1.5-vision`、阿里 `qwen-vl-max`、本地 Ollama `llava` 都可以。
@@ -41,7 +50,7 @@ A: `Ctrl+Shift+H` 切换。或点气泡右上角 `—`（最小化）/ `✕`（�
 ## 故障排查
 
 **Q: 状态栏「未配置 API Key」？**
-A: 选项页填 key → 底部「保存」（不是「测试连接」）。看 status 出现「✓ 已保存」。
+A: 选项页添加服务商并填 key → 底部「保存」（不是「测试」）。看 status 出现「✓ 已保存」。注意：只填了 key 但没勾选「启用」的服务商不会被调用。
 
 **Q: 状态栏「失败：HTTP 401」？**
 A: API key 无效或被吊销。回选项页重新粘贴。

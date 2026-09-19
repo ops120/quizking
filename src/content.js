@@ -17,6 +17,8 @@
   let cfg = null;
   // Per-call: result.promptMode is read inside showAnswer.
   let promptMode = "answer";
+  // In-flight multi-provider request: { reqId, roster, items, promptMode, label }.
+  let activeReq = null;
 
   function getRuntime() { return chrome.runtime; }
 
@@ -292,10 +294,11 @@
       });
       return;
     }
+    const n = ((cfg && cfg.providers) || []).filter((p) => p.enabled && p.hasKey).length;
     renderBubble(
       '<div class="aqh-reasoning-block"><div class="aqh-reasoning-label">已捕获</div>' +
       escapeHtml(label || "(image)") + '</div>',
-      { status: "正在向 LLM 发送请求…", loading: true }
+      { status: n > 1 ? ("正在向 " + n + " 个模型并行发送请求…") : "正在向 LLM 发送请求…", loading: true }
     );
     const res = await callBg("aqh/ask", payload);
     if (!res || !res.ok) {
@@ -303,7 +306,47 @@
       appendError((res && res.error) || "未知错误");
       return;
     }
-    showAnswer(res.result);
+    beginIncremental(res.result, label);
+  }
+
+  /**
+   * Results stream in one provider at a time. The roster arrives with the
+   * immediate reply so every card can be drawn up front; each pushed item then
+   * fills its own card. A single provider keeps the original plain layout.
+   */
+  function beginIncremental(result, label) {
+    const roster = Array.isArray(result.pending) ? result.pending : [];
+    if (!result.reqId) { showAnswer(result); return; }
+    activeReq = {
+      reqId: result.reqId,
+      roster,
+      items: {},
+      promptMode: result.promptMode,
+      label: label || "",
+    };
+    if (roster.length <= 1) return; // nothing to interleave: wait for the single result
+    renderProgress();
+  }
+
+  function currentItems() {
+    if (!activeReq) return [];
+    return activeReq.roster.map((p) => activeReq.items[p.id] || {
+      id: p.id, label: p.label, model: p.model, ok: null,
+    });
+  }
+
+  function renderProgress() {
+    const st = activeReq;
+    if (!st) return;
+    const body = document.getElementById("aqh-body");
+    if (!body) return;
+    const items = currentItems();
+    body.innerHTML = ""; // re-render the whole set; each arrival replaces the previous frame
+    renderMulti(body, items, st.promptMode, st.label);
+    const arrived = items.filter((it) => it.ok !== null).length;
+    setStatus(arrived < items.length
+      ? ("已返回 " + arrived + "/" + items.length + "，等待其余模型…")
+      : "完成。");
   }
 
   function appendError(msg) {
@@ -316,38 +359,66 @@
     body.appendChild(div);
   }
 
-  function showAnswer(r) {
-    const body = document.getElementById("aqh-body");
-    if (!body) return;
-    log("showAnswer mode=", r.promptMode, "reason_len=", (r.reasoning || "").length);
-    body.innerHTML = "";
-
-    let answer = (r.answer || "").trim();
-    let reasoning = (r.reasoning || "").trim();
-
-    if (answer && (answer.startsWith("{") || answer.startsWith("`"))) {
+  // Models often wrap the payload in prose or code fences; unwrap when we can.
+  function unwrapResult(answer, reasoning) {
+    let a = String(answer || "").trim();
+    let re = String(reasoning || "").trim();
+    if (a && (a.startsWith("{") || a.startsWith("`"))) {
       try {
-        const obj = JSON.parse(answer.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "").trim());
+        const obj = JSON.parse(a.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "").trim());
         if (obj && typeof obj === "object") {
-          if (obj.answer) answer = String(obj.answer).trim();
-          if (!reasoning && obj.reasoning) reasoning = String(obj.reasoning).trim();
+          if (obj.answer) a = String(obj.answer).trim();
+          if (!re && obj.reasoning) re = String(obj.reasoning).trim();
         }
       } catch {}
     }
-    if (reasoning && reasoning.startsWith("{")) {
+    if (re && re.startsWith("{")) {
       try {
-        const obj = JSON.parse(reasoning);
-        if (obj && obj.reasoning) reasoning = String(obj.reasoning).trim();
+        const obj = JSON.parse(re);
+        if (obj && obj.reasoning) re = String(obj.reasoning).trim();
       } catch {}
     }
+    return { answer: a, reasoning: re };
+  }
 
+  // Heuristic equality: ignore case and whitespace.
+  function normAnswer(s) {
+    return String(s || "").trim().toUpperCase().replace(/\s+/g, "");
+  }
+
+  function showAnswer(r) {
+    const body = document.getElementById("aqh-body");
+    if (!body) return;
+    const items = Array.isArray(r.items) ? r.items : null;
+    log("showAnswer items=", items ? items.length : "(legacy)", "mode=", r.promptMode);
+    body.innerHTML = "";
+
+    if (items && items.length) {
+      if (items.length === 1) {
+        const only = items[0];
+        if (!only.ok) {
+          body.appendChild(itemCard(only));
+          setStatus(only.ok === null ? "等待中…" : ("失败：" + (only.error || "未知错误")));
+          return;
+        }
+        // Single provider: keep the original plain layout.
+        renderSingle(body, only.answer, only.reasoning, only.raw, r.promptMode);
+        return;
+      }
+      renderMulti(body, items, r.promptMode, r.label);
+      return;
+    }
+    // Legacy response shape (single answer, no items array).
+    renderSingle(body, r.answer, r.reasoning, r.raw, r.promptMode);
+  }
+
+  function renderSingle(body, answerRaw, reasoningRaw, raw, modeIn) {
+    const { answer, reasoning } = unwrapResult(answerRaw, reasoningRaw);
     // Use mode from the per-call response; fall back to module-level.
-    const mode = r.promptMode || promptMode || "answer";
+    const mode = modeIn || promptMode || "answer";
     // In answer-only mode, drop any reasoning the model still emitted.
-    if (mode === "answer") reasoning = "";
-    const showReasoning = !!(reasoning && reasoning !== answer);
+    const showReasoning = mode !== "answer" && !!reasoning && reasoning !== answer;
 
-    // Render
     if (answer) {
       const a = document.createElement("div");
       a.className = "aqh-answer";
@@ -367,14 +438,150 @@
       re.querySelector(".aqh-reasoning-block").textContent = reasoning;
       body.appendChild(re);
     }
-    if (!answer && !reasoning && r.raw) {
-      const raw = document.createElement("div");
-      raw.style.marginTop = "8px";
-      raw.innerHTML = '<div class="aqh-reasoning-label">原始输出</div><div class="aqh-pre"></div>';
-      raw.querySelector(".aqh-pre").textContent = r.raw;
-      body.appendChild(raw);
+    if (!answer && !reasoning && raw) {
+      const rw = document.createElement("div");
+      rw.style.marginTop = "8px";
+      rw.innerHTML = '<div class="aqh-reasoning-label">原始输出</div><div class="aqh-pre"></div>';
+      rw.querySelector(".aqh-pre").textContent = raw;
+      body.appendChild(rw);
     }
     setStatus(answer ? "完成。" : "完成（模型未返回结构化输出，已展示原始文本）。");
+  }
+
+  function renderMulti(body, items, modeIn, label) {
+    const mode = modeIn || promptMode || "answer";
+    // ok === true 成功 / false 失败 / null 尚未返回
+    const okItems = items.filter((it) => it.ok === true);
+    const failedCount = items.filter((it) => it.ok === false).length;
+    const pendingCount = items.filter((it) => it.ok === null).length;
+    const norms = okItems.map((it) => normAnswer(unwrapResult(it.answer, it.reasoning).answer));
+
+    // Majority vote is only used to flag outliers, never to hide results.
+    const counts = {};
+    norms.forEach((n) => { counts[n] = (counts[n] || 0) + 1; });
+    let majority = null, best = 0;
+    Object.keys(counts).forEach((k) => { if (counts[k] > best) { best = counts[k]; majority = k; } });
+    const hasMajority = best > 1;
+    const allSame = okItems.length > 1 && best === okItems.length;
+
+    if (label) {
+      const cap = document.createElement("div");
+      cap.className = "aqh-reasoning-block";
+      cap.style.marginBottom = "8px";
+      cap.innerHTML = '<div class="aqh-reasoning-label">已捕获</div>';
+      const t = document.createElement("div");
+      t.textContent = label;
+      cap.appendChild(t);
+      body.appendChild(cap);
+    }
+
+    const badge = document.createElement("div");
+    badge.className = "aqh-consensus " + (pendingCount ? "aqh-wait" : (allSame ? "aqh-same" : "aqh-diff"));
+    let text;
+    if (okItems.length > 1) {
+      text = allSame
+        ? ("✓ " + okItems.length + " 个模型答案一致")
+        : (hasMajority ? ("⚠ 答案不一致（" + best + "/" + okItems.length + " 一致）") : "⚠ 答案各不相同");
+    } else if (okItems.length === 1) {
+      text = "仅 1 个模型返回结果";
+    } else if (pendingCount) {
+      text = "等待模型返回…";
+    } else {
+      text = "全部模型调用失败";
+    }
+    const notes = [];
+    if (failedCount) notes.push(failedCount + " 个失败");
+    if (pendingCount) notes.push(pendingCount + " 个等待中");
+    if (notes.length) text += " · " + notes.join(" · ");
+    badge.textContent = text;
+    body.appendChild(badge);
+
+    items.forEach((it) => {
+      const minority = it.ok === true && hasMajority &&
+        normAnswer(unwrapResult(it.answer, it.reasoning).answer) !== majority;
+      body.appendChild(itemCard(it, mode, minority));
+    });
+
+    if (pendingCount) return; // status line is owned by renderProgress while streaming
+    setStatus(okItems.length ? "完成。" : "失败：所有服务商均未返回结果。");
+  }
+
+  function itemCard(it, modeIn, minority) {
+    const mode = modeIn || promptMode || "answer";
+    const pending = it.ok === null;
+    const wrap = document.createElement("div");
+    wrap.className = "aqh-item" +
+      (it.ok === false ? " aqh-item-fail" : "") +
+      (pending ? " aqh-item-pending" : "") +
+      (minority ? " aqh-minority" : "");
+
+    const head = document.createElement("div");
+    head.className = "aqh-item-head";
+    const name = document.createElement("span");
+    name.className = "aqh-item-label";
+    name.textContent = it.label || it.model || "服务商";
+    head.appendChild(name);
+    if (it.model) {
+      const m = document.createElement("span");
+      m.className = "aqh-item-model";
+      m.textContent = it.model;
+      head.appendChild(m);
+    }
+    if (pending) {
+      const w = document.createElement("span");
+      w.className = "aqh-item-ms";
+      w.textContent = "等待中…";
+      head.appendChild(w);
+    } else if (typeof it.ms === "number") {
+      const t = document.createElement("span");
+      t.className = "aqh-item-ms";
+      t.textContent = (it.ms / 1000).toFixed(1) + "s";
+      head.appendChild(t);
+    }
+    if (minority) {
+      const flag = document.createElement("span");
+      flag.className = "aqh-item-flag";
+      flag.textContent = "少数";
+      head.appendChild(flag);
+    }
+    wrap.appendChild(head);
+
+    if (pending) return wrap;
+
+    if (it.ok === false) {
+      const err = document.createElement("div");
+      err.className = "aqh-err";
+      err.textContent = it.error || "未知错误";
+      wrap.appendChild(err);
+      return wrap;
+    }
+
+    const { answer, reasoning } = unwrapResult(it.answer, it.reasoning);
+    if (answer) {
+      const block = document.createElement("div");
+      block.className = "aqh-answer-block";
+      block.textContent = answer;
+      wrap.appendChild(block);
+    }
+    if (mode !== "answer" && reasoning && reasoning !== answer) {
+      const d = document.createElement("details");
+      d.className = "aqh-item-reason";
+      const s = document.createElement("summary");
+      s.textContent = "解析";
+      const pre = document.createElement("div");
+      pre.className = "aqh-reasoning-block";
+      pre.textContent = reasoning;
+      d.appendChild(s);
+      d.appendChild(pre);
+      wrap.appendChild(d);
+    }
+    if (!answer && !reasoning && it.raw) {
+      const pre = document.createElement("div");
+      pre.className = "aqh-pre";
+      pre.textContent = it.raw;
+      wrap.appendChild(pre);
+    }
+    return wrap;
   }
 
   function toggleFab() {
@@ -483,6 +690,34 @@
     }
     if (msg.type === "aqh/ping") {
       sendResponse({ ok: true });
+    }
+    // Incremental results: each provider lands on its own, then a final settle.
+    if (msg.type === "aqh/ask-item") {
+      const p = msg.payload || {};
+      if (activeReq && p.reqId === activeReq.reqId && p.item) {
+        activeReq.items[p.item.id] = p.item;
+        if (activeReq.roster.length > 1) renderProgress();
+      }
+      return sendResponse({ ok: true });
+    }
+    if (msg.type === "aqh/ask-finish") {
+      const p = msg.payload || {};
+      if (activeReq && p.reqId === activeReq.reqId) {
+        const st = activeReq;
+        activeReq = null;
+        const items = Array.isArray(p.items) ? p.items : [];
+        if (st.roster.length <= 1) {
+          // Single provider: plain layout (or a lone failure card).
+          showAnswer({ items, promptMode: p.promptMode || st.promptMode });
+        } else {
+          const body = document.getElementById("aqh-body");
+          if (body) {
+            body.innerHTML = "";
+            renderMulti(body, items, p.promptMode || st.promptMode, st.label);
+          }
+        }
+      }
+      return sendResponse({ ok: true });
     }
   });
 

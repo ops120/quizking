@@ -4,7 +4,7 @@
 
 > 把网页上看到的题目（截图 / 划词 / DOM）丢给 OpenAI 兼容 LLM，把答案 / 解析吐回悬浮气泡。
 
-[![Release](https://img.shields.io/badge/release-v0.2.0-3563ff)](../../releases)
+[![Release](https://img.shields.io/badge/release-v0.3.0-3563ff)](../../releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 [![Manifest V3](https://img.shields.io/badge/manifest-V3-3563ff)](#技术栈)
 [![Chrome 114+](https://img.shields.io/badge/chrome-114%2B-4285f4)](#安装)
@@ -34,6 +34,7 @@
 ## 特性
 
 - **三通道采集** — 划词文本 / 整页 DOM 文本 / 可见区域截图 + 框选裁剪
+- **多 API 并行对比** — 可配置多个服务商（各自 Endpoint / Key / Model），抓题时同时调用，**谁先返回谁先显示**，答案并列展示并标记是否一致
 - **OpenAI 兼容 endpoint** — OpenAI / DeepSeek / 火山方舟 / Ollama 全部可接
 - **两种 Prompt 模式** — 答案 + 解析（默认）/ 自定义
 - **可拖动悬浮气泡**，可设透明度（0.4–1.0），调低后自动去色淡化、融入页面，ESC 隐藏，⚙ 跳设置
@@ -77,16 +78,38 @@
 ## 配置
 
 1. 工具栏点「王」字图标 → 「设置」打开选项页
-2. 填写：
+2. 在「LLM 连接」点「＋ 添加服务商」，每个服务商填：
+   - **名称**：自定义标签（如 `DeepSeek`），气泡里用它标识答案来源
    - **Endpoint**：例如 `https://api.openai.com/v1`（**不要**带 `/chat/completions`，插件自动拼）
    - **API Key**：`sk-...`，存于 `chrome.storage.sync`，不上报
    - **Model**：默认 `gpt-4o-mini`，多模态截图建议 `gpt-4o-mini` / `qwen-vl-max` / `doubao-1.5-vision`
-   - **Temperature**：拖动滑块，0–2
-   - **System Prompt**：见下「Prompt 模式」
-3. 点「测试连接」 → 显示 `✓ 连接正常` 即通
+   - **启用**：取消勾选即临时停用，不删配置
+   - **Temperature / System Prompt**：所有服务商共用，见下「Prompt 模式」
+3. 点单个服务商的「测试」验证连通，或点「测试全部」一次测完
 4. 改任何字段都会显示「● 有未保存的修改」 → 点底部「保存」
 
+> 从旧版本升级无需重填：原来的 Endpoint / API Key / Model 会自动迁移为第一个服务商。
+
 ![配置模型](assets/screenshots/config.png)
+
+### 多 API 并行对比
+
+启用多个服务商后，每次抓题会**同时**向它们发请求（真并发，总耗时约等于最慢的那个），气泡里并列展示各自答案：
+
+| 情况 | 气泡表现 |
+| --- | --- |
+| 全部一致 | 顶部标 `✓ N 个模型答案一致` |
+| 出现分歧 | 顶部标 `⚠ 答案不一致（2/3 一致）`，少数派那张卡加「少数」角标 |
+| 某个服务商报错 | 该卡变红显示原因（如 `HTTP 401`），其余答案照常显示 |
+| 只启用一个 | 显示与单 API 完全一致，不出现对比标记 |
+
+![两个模型并行返回：MiniMax-M3 与 mimo-v2.5 答案一致](assets/screenshots/新增多模型回复.png)
+
+**结果先后返回，不等最慢的**：发请求是所有服务商并行，但**谁先返回就先画进气泡**——气泡先画出全部服务商的占位卡（标「等待中…」），随后每返回一个就填充一张，状态栏显示「已返回 2/3，等待其余模型…」。一致性徽章也随之逐步更新（等待期间显示灰色 `等待模型返回…`）。所以快模型的结果不用等慢模型。
+
+单个服务商 45 秒无响应会被判定超时（显示「超时（45s 无响应）」），不会让气泡一直转圈。
+
+解析默认折叠，点「解析」展开。注意：图片题会发给**所有**启用的服务商，不支持视觉的模型会报错并显示为失败卡。
 
 ### 气泡透明度
 
@@ -141,15 +164,18 @@
 ┌─────────────────────────────────────────┐             │
 │           content.js (page)              │  ◄──────────┘
 │  - capture (selection / visible / page)  │   chrome.storage.sync
-│  - bubble UI + FAB                        │   (apiKey / endpoint /
-│  - parseAnswer, showAnswer                │    promptMode / …)
+│  - bubble UI + FAB                        │   (providers[] /
+│  - parseAnswer, showAnswer（多路并列）    │    promptMode /
+│  - 一致性标记 / 少数派角标                │    bubbleOpacity / …)
 └────────────────────┬────────────────────┘
                      │ chrome.runtime.sendMessage
                      ▼
-            ┌──────────────────┐
-            │  OpenAI-兼容 LLM │
-            │  (user endpoint) │
-            └──────────────────┘
+            background.js 并行扇出（Promise.allSettled，单个失败不阻塞其余）
+                ├─ provider A → POST /chat/completions
+                ├─ provider B → POST /chat/completions
+                └─ provider C → POST /chat/completions
+                     │
+                     ▼  结果聚合为 items[]，回传气泡并列展示
 ```
 
 ### 文件树
@@ -189,11 +215,18 @@ docs/                             # 本地开发日志（已在 .gitignore）
 
 | type | 行为 | 返回 |
 | --- | --- | --- |
-| `aqh/get-config` | 读 storage，去 `apiKey` | `{ ok, cfg, hasKey }` |
+| `aqh/get-config` | 读 storage，逐条剥离 `apiKey` | `{ ok, cfg, hasKey }` |
 | `aqh/capture-visible-tab` | `chrome.tabs.captureVisibleTab` | `{ ok, dataUrl }` |
-| `aqh/ask` | POST `/chat/completions` + `parseAnswer` + 写历史 | `{ ok, result: { answer, reasoning, raw, promptMode } }` |
-| `aqh/test` | 仅探测 storage 状态 | `{ ok, cfg, hasKey }` |
+| `aqh/ask` | 立即回执服务商名单，随后并行调用 + 增量推送结果 | `{ ok, result: { reqId, pending[], promptMode } }` |
+| `aqh/test` | 仅探测 storage 状态 | `{ ok, cfg, hasKey, providerCount }` |
 | `aqh/selftest` | 默认关闭，需 `self.__AQH_SELFTEST__ = true` | `{ ok, cfg, routes, flags }` |
+
+`aqh/ask` 的结果不走响应体，而是由 background 主动推送（`chrome.tabs.sendMessage`）：
+
+| 推送 type | 时机 | payload |
+| --- | --- | --- |
+| `aqh/ask-item` | 每有一个服务商返回或失败 | `{ reqId, item }` |
+| `aqh/ask-finish` | 全部落定 | `{ reqId, items[], promptMode }` |
 
 > 内部协议命名空间为 `aqh/`（保持稳定，便于第三方工具集成）。
 
@@ -260,9 +293,9 @@ const svg = fs.readFileSync('src/icons/icon.svg');
 ## 隐私与安全
 
 - **API Key** 只存于 `chrome.storage.sync`，永不上报
-- **fetch 出站** 只去用户在设置里填的 `endpoint`，**没有**其他任何外发
+- **fetch 出站** 只去用户在设置里填的 `endpoint`（多服务商时即你启用的那几个），**没有**其他任何外发
 - **history** 仅写 `chrome.storage.local`，默认保存最近 200 条，可在选项页关闭 / 清空
-- **content 脚本**永远拿不到 `apiKey`（`sanitizeCfg` 脱敏后回传）
+- **content 脚本**永远拿不到 `apiKey`（`sanitizeCfg` 逐条剥离后回传）
 - **控制台日志** 只输出长度统计 / 通用错误消息，**不含**用户文本或 key
 - 安全问题不要开 public issue，按 [SECURITY.md](./SECURITY.md) 流程报告
 

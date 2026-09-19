@@ -25,29 +25,33 @@
    - *Service worker registration failed* → `background.js` 顶部的 `import` 引用了不存在的路径；本项目只用 MV3 module，无外部 import，应当空。
    - *Permission 'tabs' is required* → 不要手动改 manifest；当前已经声明 `activeTab`+`scripting`，截图走 `chrome.tabs.captureVisibleTab`，无需 `tabs`。
 
-## 2. 打开选项页并填写 endpoint / apiKey / model
+## 2. 打开选项页并填写服务商（可多个）
 
 1. 工具栏图标 → 弹 popup → 点 **设置**；或右键扩展 → *选项*；或 `chrome://extensions/` → 该卡片 *Details* → *Extension options*。
-2. 期望打开新标签页：`options.html`。
-3. 依次填写：
+2. 期望打开新标签页：`options.html`，「LLM 连接」区显示服务商列表（空态时提示「尚未添加服务商」）。
+3. 点 **＋ 添加服务商**，为每个服务商填写：
+   - `名称`：自定义标签（如 `DeepSeek`），气泡里用它标识答案来源。
    - `Endpoint`：`https://api.openai.com/v1`（或 DeepSeek `https://api.deepseek.com/v1` 等），**不要**带尾部 `/chat/completions`。
    - `API Key`：`sk-...`（粘贴）。
    - `Model`：默认 `gpt-4o-mini`，按需替换。
-   - 可选：`Temperature`、`System Prompt`、`气泡透明度`、`保存历史`。
-4. 点页面底部 **保存** → `#saveRes` 显示「已保存。」1.5s 后清空。
-5. 期望：刷新页面（保留 storage.sync），三个字段值仍在。
+   - `启用`：取消勾选即停用该服务商（不删配置）。
+   - 可选（全局共用）：`Temperature`、`System Prompt`、`气泡透明度`、`保存历史`。
+4. **多 API 对比**：再加一条不同 endpoint（或同 endpoint 换 model），两条都勾选 → 抓题时并行调用。
+5. 点页面底部 **保存** → `#saveRes` 显示「已保存。」数秒后清空。
+6. 期望：刷新页面（保留 storage.sync），所有服务商与字段值仍在。
+7. 旧版本升级：原 `endpoint`/`apiKey`/`model` 会自动迁移为第一条服务商（`label: "默认"`），无需重填。
 
 ## 3. 测试连接
 
-1. 在选项页点 **测试连接** → `#testRes` 立即显示「测试中…」。
+1. 在选项页点某条服务商的 **测试** → 该行右侧显示「测试中…」。
 2. 等 1~3 秒（取决于网络与 endpoint）。
-3. 期望 `#testRes` 显示 `✓ 连接正常`。
+3. 期望该行显示 `✓ 连接正常`（绿色）；点 **测试全部** 则所有行并发测试，底部 `#testRes` 汇总为 `✓ 全部正常` 或 `n / m 个未通过`。
 4. 失败常见原因：
    - 「缺少 API Key」→ 回到 §2，确认 key 已保存（注意：粘贴时可能含空格）。
    - 「失败：HTTP 401 / 403」→ key 无效或 endpoint 不匹配该 key 的鉴权头。
-   - 「失败：HTTP 404」→ 端点 base 写错，路径 `/chat/completions` 是代码自动追加的（见 `background.js askLLM()` 中 `(cfg.endpoint || DEFAULTS.endpoint).replace(/\/$/, "") + "/chat/completions"`）。
+   - 「失败：HTTP 404」→ 端点 base 写错，路径 `/chat/completions` 是代码自动追加的（见 `background.js callProvider()` 中 `(provider.endpoint || PROVIDER_DEFAULTS.endpoint).replace(/\/$/, "") + "/chat/completions"`）。
    - `CORS / Failed to fetch` → 你的 endpoint 未开启浏览器跨域；Ollama 默认 `http://localhost:11434/v1` 在 Chrome 里 **禁止跨域**，需自建反代或换其他 endpoint。
-5. 选填项：在弹 popup 看 `keyState` 是否变为 `API Key ✓`（来自 `aqh/test` 消息，`popup.js`）。
+5. 选填项：在弹 popup 看 `keyState` 是否变为 `API Key ✓`（多个服务商时显示 `API Key ✓ · N 个服务商`，来自 `aqh/test` 消息，`popup.js`）。
 
 ## 4. 三种采集通道 — 快捷键
 
@@ -61,8 +65,13 @@
 3. 期望：
    - 页面右下角 / 拖动钉住处 出现 `id=aqh-root > #aqh-bubble` 气泡。
    - 头部：标题「QuizKing · 答题王」+ ⚙ / — / ✕ 按钮。
-   - 正文：先显示 `.aqh-reasoning-block`「已捕获 `[selection] …`」+ `#aqh-status` 出现 spinner + 「正在向 LLM 发送请求…」。
-   - 数秒后，正文改成 **答案** 块（`.aqh-answer-block`，如 `42`）+ **解析** 块（`.aqh-reasoning-block`，中文步骤）；底部状态变「完成。可再次触发或调整 prompt。」。
+   - 正文：先显示 `.aqh-reasoning-block`「已捕获 `[selection] …`」+ `#aqh-status` 出现 spinner + 「正在向 LLM 发送请求…」（启用多个服务商时为「正在向 N 个模型并行发送请求…」）。
+   - 数秒后，正文改成 **答案** 块（`.aqh-answer-block`，如 `42`）+ **解析** 块（`.aqh-reasoning-block`，中文步骤）；底部状态变「完成。」。
+   - **启用多个服务商时**：气泡**先**显示 `.aqh-consensus.aqh-wait` 灰色徽章（`等待模型返回… · N 个等待中`）+ N 张虚线 `.aqh-item-pending` 占位卡（头部右侧标「等待中…」），状态栏为「已返回 0/N，等待其余模型…」。
+   - 随后**每返回一个就填一张**（不必等最慢的）：该卡变为实线并显示答案、耗时与折叠的 `<details>` 解析；状态栏计数递增。徽章在此期间实时重算（如 `⚠ 答案各不相同 · 1 个等待中`）。
+   - 全部落定后：徽章定稿（`✓ N 个模型答案一致` / `⚠ 答案不一致（2/3 一致）` / `⚠ 答案各不相同`），失败卡为 `.aqh-item-fail` 红色显示原因；少数派卡片带 `.aqh-minority` 与「少数」角标。
+   - 单个服务商 45s 无响应 → 该卡显示「超时（45s 无响应）」，其余结果不受影响。
+   - **只启用一个服务商时**：不出现徽章与占位卡，直接是原来的「答案 + 解析」布局（下方 E2E 已验证）。
 4. 异常分支：
    - 气泡内显示「未选中文本。」→ 浏览器内某些 `<input>` / `contenteditable` 内选择不会触发 `window.getSelection`；请选 `body` 文本。
    - 气泡显示「未配置 API Key」+ 「打开设置」按钮 → 点按钮直达选项页。
@@ -115,7 +124,7 @@
 
 ```js
 chrome.runtime.sendMessage({ type: "aqh/selftest" })
-//  →  { ok: true, cfg: DEFAULTS (sanitized), manifest: "0.2.0", routes: [...] }
+//  →  { ok: true, cfg: DEFAULTS (sanitized，含 providers[]，逐条去 apiKey), manifest: "0.3.0", routes: [...] }
 ```
 
 目的：
