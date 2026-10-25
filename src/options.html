@@ -2,30 +2,39 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8" />
-<title>QuizKing · 答题王 设置</title>
+<title>QuizKing Ultimate · 设置</title>
 <link rel="stylesheet" href="options.css" />
 </head>
 <body>
 <header>
-  <h1>QuizKing · 答题王 · 设置</h1>
-  <div class="sub">连接 OpenAI 兼容 LLM，自定义快捷键与气泡外观。</div>
+  <h1>QuizKing Ultimate · 设置</h1>
+  <div class="sub">融合多模型并行推理 + 自动答题。连接 OpenAI 兼容 LLM，自定义快捷键与气泡外观。</div>
 </header>
 <main>
   <section class="about-hero">
     <p class="about-line">
-      <span class="about-star">⭐</span>
-      <b>代码开源，欢迎 Star</b>
-      <span class="about-sep">·</span>
-      <a class="gh-link" href="https://github.com/ops120/quizking" target="_blank" rel="noopener noreferrer">
-        github.com/ops120/quizking
-      </a>
+      <span class="about-star">🚀</span><b>QuizKing Ultimate</b><span class="about-sep">·</span>自动答题版 — 检测题目 → LLM推理 → 自动点击
     </p>
-    <p class="muted about-sub">Bug、功能建议请到仓库提 Issue；想贡献代码也欢迎 PR。</p>
+    <p class="muted about-sub">基于 QuizKing 构建，新增自动检测题目、逐题推理作答、交卷拦截功能。</p>
+  </section>
+
+  <section>
+    <h2>自动答题</h2>
+    <p class="muted">快捷键 <kbd>Ctrl+Shift+F</kbd> 或右键菜单触发。自动检测页面题目，逐题推理并点击答案，但不交卷。</p>
+    <label>批量答题数（1=逐题，N=每批N题并行）<span id="batchV">5</span>
+      <input id="autoBatch" type="range" min="1" max="30" step="1" value="5" />
+    </label>
+    <label class="chk"><input id="silentMode" type="checkbox" />静默模式（只答题不弹气泡）</label>
+    <label class="chk"><input id="visualFx" type="checkbox" />自动答题视觉特效（高亮遮罩 / 虚拟光标 / 消息面板；关闭后仅保留气泡内的答案展示）</label>
+    <label class="chk"><input id="inlineBadge" type="checkbox" />行内答案徽标（在每题下方显示答案与解析，不影响自动点击；可用 popup「答案显隐」随时收起）</label>
+    <label>每题延迟（ms）<span id="delayV">300</span>
+      <input id="autoDelay" type="range" min="100" max="2000" step="50" value="300" />
+    </label>
   </section>
 
   <section>
     <h2>LLM 连接</h2>
-    <p class="muted">可添加多个服务商：抓题时并行调用，气泡里并列展示各自答案并标记是否一致。只启用一个时，气泡显示与原来一致。</p>
+    <p class="muted">可添加多个服务商：抓题时并行调用，气泡里并列展示各自答案并标记是否一致。</p>
     <div id="providers" class="providers"></div>
     <div class="row">
       <button id="addProvider" type="button">＋ 添加服务商</button>
@@ -39,84 +48,67 @@
 
   <section>
     <h2>Prompt 模式</h2>
-    <p class="muted">默认「答案 + 解析」，可换「自定义」。</p>
-    <label class="chk">
-      <input type="radio" name="promptMode" value="reason" checked />
-      答案 + 解析（默认）
-    </label>
+    <label class="chk"><input type="radio" name="promptMode" value="reason" checked />答案 + 解析（默认）</label>
     <div id="reasoningBox" class="promptBox">
-      <label class="inner">解析 Prompt（输出包含 reasoning 字段）
-        <textarea id="reasoningPrompt" rows="6"></textarea>
-      </label>
+      <label class="inner">解析 Prompt<textarea id="reasoningPrompt" rows="6"></textarea></label>
     </div>
-    <label class="chk">
-      <input type="radio" name="promptMode" value="custom" />
-      自定义
-    </label>
+    <label class="chk"><input type="radio" name="promptMode" value="custom" />自定义</label>
     <div id="customBox" class="promptBox">
-      <label class="inner">自定义 Prompt
-        <textarea id="systemPrompt" rows="6"></textarea>
-      </label>
+      <label class="inner">自定义 Prompt<textarea id="systemPrompt" rows="6"></textarea></label>
     </div>
   </section>
 
   <section>
     <h2>外观与历史</h2>
-    <label>气泡透明度 <span id="opaV">0.95</span>
-      <input id="bubbleOpacity" type="range" min="0.4" max="1" step="0.05" value="0.95" />
-    </label>
-    <label class="chk">
-      <input id="saveHistory" type="checkbox" checked />
-      保存历史记录（最近 200 条）
-    </label>
-    <div class="row">
-      <button id="clearHistory">清空历史</button>
-      <button id="viewHistory">查看历史</button>
-    </div>
+    <label>气泡透明度 <span id="opaV">0.95</span><input id="bubbleOpacity" type="range" min="0.4" max="1" step="0.05" value="0.95" /></label>
+    <label class="chk"><input id="saveHistory" type="checkbox" checked />保存历史记录（最近 200 条）</label>
+    <div class="row"><button id="clearHistory">清空历史</button><button id="viewHistory">查看历史</button></div>
     <div id="historyBox" class="history"></div>
   </section>
 
   <section>
-    <h2>快捷键</h2>
-    <p class="muted">在 <code>chrome://extensions/shortcuts</code> 中可重新绑定这 4 个命令。Windows / Linux 用 <kbd>Ctrl</kbd>，macOS 用 <kbd>⌘ Command</kbd>。</p>
+    <h2>检测与作答流程</h2>
+    <p class="muted">推荐<b>先检测、再作答</b>：检测只识别页面结构与可作答性，不调用 LLM、不点击任何选项，可先确认页面是否支持。</p>
     <table class="kbd-table">
-      <thead>
-        <tr>
-          <th>快捷键</th>
-          <th>作用</th>
-          <th>何时用</th>
-        </tr>
-      </thead>
+      <thead><tr><th>入口</th><th>作用</th><th>说明</th></tr></thead>
       <tbody>
-        <tr>
-          <td><kbd>Ctrl+Shift+Q</kbd></td>
-          <td><b>抓取选区</b></td>
-          <td>先在页面选中一段文字（含中文 / 公式 / 代码皆可），按后把选区文本发给 LLM。推荐：网页上能直接选中的题。</td>
-        </tr>
-        <tr>
-          <td><kbd>Ctrl+Shift+E</kbd></td>
-          <td><b>抓取可见区域</b>（截图）</td>
-          <td>整页变暗后拖框选区裁剪，截图发给多模态 LLM。推荐：题目是图片、表格、代码截图、PDF 阅读器视图，或反爬不让选。</td>
-        </tr>
-        <tr>
-          <td><kbd>Ctrl+Shift+P</kbd></td>
-          <td><b>抓取整页 DOM 文本</b></td>
-          <td>无选区时把整页 <code>innerText</code> 前 6000 字符发给 LLM。推荐：长文章 / 整段题文 / 多选合集。</td>
-        </tr>
-        <tr>
-          <td><kbd>Ctrl+Shift+H</kbd></td>
-          <td><b>显示 / 隐藏气泡</b></td>
-          <td>答题完成后想收起气泡（不删除内容），再按一次又出现。气泡拖到屏幕任何位置可记忆。</td>
-        </tr>
+        <tr><td>popup「🔍 检测题目」/ FAB「🔍检测」</td><td><b>仅检测</b></td><td>报告题目数量、题型分布、可自动点击的题数；检测结果气泡内可直接点「开始自动作答」</td></tr>
+        <tr><td>popup「🤖 自动答题」</td><td><b>检测+推理+点击</b></td><td>内部会先检测，无题目则直接提示，不会浪费 LLM 请求</td></tr>
       </tbody>
     </table>
-    <p class="muted">其他触发方式：页面右下角「王」字悬浮按钮（悬停展开 4 个子按钮）、选中文字右键菜单、工具栏图标 popup。</p>
+  </section>
+
+  <section>
+    <h2>禁复制页面的用法</h2>
+    <p class="muted">部分考试/网课页面禁止选中文字与右键菜单，此时<b>选区</b>通道不可用，请改用截图通道：</p>
+    <table class="kbd-table">
+      <thead><tr><th>入口</th><th>作用</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td>popup「📸 截图」</td><td><b>框选截图作答</b></td><td>拖框选中题目区域→多模态模型看图作答</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>快捷键</h2>
+    <p class="muted">在 <code>chrome://extensions/shortcuts</code> 中可重新绑定。</p>
+    <table class="kbd-table">
+      <thead><tr><th>快捷键</th><th>作用</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td><kbd>Ctrl+Shift+F</kbd></td><td><b>🚀 自动答题</b></td><td>检测题目→推理→点击（不交卷）</td></tr>
+        <tr><td><kbd>Ctrl+Shift+Q</kbd></td><td><b>抓取选区</b></td><td>选中文字后发给 LLM</td></tr>
+        <tr><td><kbd>Ctrl+Shift+E</kbd></td><td><b>抓取截图</b></td><td>框选区域截图发给多模态 LLM</td></tr>
+        <tr><td><kbd>Ctrl+Shift+H</kbd></td><td><b>显示/隐藏气泡</b></td><td>收起或恢复气泡</td></tr>
+      </tbody>
+    </table>
+    <p class="muted">其他触发：右下角「王」悬浮按钮、选中文字右键菜单、工具栏popup。</p>
   </section>
 </main>
 
 <footer>
   <button id="saveBtn" class="primary">保存</button>
   <span id="saveRes" class="muted"></span>
+  <a class="muted" href="https://github.com/ops120/quizking" target="_blank" rel="noopener">项目主页</a>
 </footer>
 <script src="options.js"></script>
 </body>

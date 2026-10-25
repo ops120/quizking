@@ -1,62 +1,49 @@
 {
   "manifest_version": 3,
-  "name": "__MSG_extName__",
-  "default_locale": "zh_CN",
-  "description": "__MSG_extDescription__",
-  "version": "0.3.0",
+  "name": "QuizKing Ultimate · 答题王终极版",
+  "version": "1.0.0",
+  "description": "自动答题助手 — 检测题目 + LLM推理 + 自动点击 + 视觉反馈 + 交卷拦截",
+  "homepage_url": "https://github.com/ops120/quizking",
   "minimum_chrome_version": "114",
   "action": {
-    "default_title": "QuizKing · 答题王",
+    "default_title": "答题王",
     "default_popup": "popup.html"
   },
   "background": {
     "service_worker": "background.js",
     "type": "module"
   },
-  "permissions": [
-    "storage",
-    "activeTab",
-    "contextMenus",
-    "scripting",
-    "notifications"
-  ],
-  "host_permissions": [
-    "<all_urls>"
-  ],
-  "options_ui": {
-    "page": "options.html",
-    "open_in_tab": true
-  },
+  "permissions": ["storage", "activeTab", "contextMenus"],
+  "host_permissions": ["<all_urls>"],
+  "options_ui": { "page": "options.html", "open_in_tab": true },
   "commands": {
     "capture-selection": {
       "suggested_key": { "default": "Ctrl+Shift+Q", "mac": "Command+Shift+Q" },
-      "description": "抓取当前选区文本并发送给 LLM（先在页面选中文字）"
+      "description": "抓取选区文本问AI"
     },
     "capture-visible": {
       "suggested_key": { "default": "Ctrl+Shift+E", "mac": "Command+Shift+E" },
-      "description": "截图当前可见区域，可拖框裁剪后发给多模态 LLM"
+      "description": "截图框选问AI"
     },
-    "capture-page": {
-      "suggested_key": { "default": "Ctrl+Shift+P", "mac": "Command+Shift+P" },
-      "description": "[实验] 抓取整页可读文本（document.innerText 前 6000 字符）。长页面会显著增加 token 消耗与延迟。"
+    "auto-answer": {
+      "suggested_key": { "default": "Ctrl+Shift+F", "mac": "Command+Shift+F" },
+      "description": "自动检测题目并作答（不交卷）"
     },
     "toggle-bubble": {
       "suggested_key": { "default": "Ctrl+Shift+H", "mac": "Command+Shift+H" },
-      "description": "显示或隐藏右下角答题气泡；按一次显示，再按一次收起"
+      "description": "显示/隐藏气泡"
     }
   },
-  "content_scripts": [
-    {
-      "matches": ["<all_urls>"],
-      "js": ["content.js"],
-      "css": ["bubble.css"],
-      "run_at": "document_idle",
-      "all_frames": false
-    }
-  ],
-  "icons": {
-    "16": "icons/icon16.png",
-    "48": "icons/icon48.png",
-    "128": "icons/icon128.png"
-  }
+  "content_scripts": [{
+    "matches": ["<all_urls>"],
+    "js": ["quiz-snapshot.js", "highlight.js", "answer-executor.js", "answer-badge.js", "content.js"],
+    "css": ["bubble.css"],
+    "run_at": "document_idle",
+    "all_frames": true
+  }],
+  "web_accessible_resources": [{
+    "resources": ["icons/*"],
+    "matches": ["<all_urls>"]
+  }],
+  "icons": { "16": "icons/icon16.png", "48": "icons/icon48.png", "128": "icons/icon128.png" }
 }

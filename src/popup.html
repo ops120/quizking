@@ -1,53 +1,49 @@
 <!doctype html>
 <html lang="zh-CN">
 <head>
-<meta charset="utf-8" />
-<title>QuizKing · 答题王</title>
+<meta charset="utf-8" /><title>QuizKing Ultimate</title>
 <style>
-  body { width: 280px; margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; color: #1f2330; }
-  h1 { font-size: 14px; padding: 10px 12px; margin: 0; background: #3563ff; color: #fff; }
-  .section { padding: 8px 12px; border-bottom: 1px solid #eee; }
-  .row { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
-  button {
-    flex: 1 1 calc(50% - 8px); appearance: none; border: 1px solid #d8dbe5; background: #fff; padding: 8px 10px; border-radius: 8px; cursor: pointer; font-size: 13px;
-  }
-  button.primary { background: #3563ff; border-color: #3563ff; color: #fff; }
-  .muted { color: #6b7080; font-size: 12px; }
-  .footer { padding: 8px 12px; display: flex; justify-content: space-between; align-items: center; }
-  a { color: #3563ff; cursor: pointer; font-size: 12px; }
-  .hint { margin-top: 6px; line-height: 1.6; }
-  .hint-title { font-weight: 600; color: #3b3f51; margin-bottom: 2px; }
-  .hint-row { display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap; }
-  .hint-row kbd { background: #eef0f6; padding: 1px 5px; border-radius: 4px; font-family: ui-monospace, monospace; font-size: 11px; color: #1f2330; }
-  .hint-tip { margin-top: 4px; color: #99a0b3; font-size: 11px; }
-
+body{width:280px;margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;color:#1f2330}
+h1{font-size:14px;padding:10px 12px;margin:0;background:linear-gradient(135deg,#3563ff,#1e3a8a);color:#fff}
+.section{padding:8px 12px;border-bottom:1px solid #eee}
+.row{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}
+button{flex:1 1 calc(50% - 8px);appearance:none;border:1px solid #d8dbe5;background:#fff;padding:8px 10px;border-radius:8px;cursor:pointer;font-size:13px}
+button.primary{background:#ff6b35;border-color:#ff6b35;color:#fff;font-weight:600;flex:1 1 100%}
+button.primary:hover{background:#e0552a}
+.muted{color:#6b7080;font-size:12px}
+.footer{padding:8px 12px;display:flex;justify-content:space-between;align-items:center}
+a{color:#3563ff;cursor:pointer;font-size:12px}
+.hint{margin-top:6px;line-height:1.6}
+.hint kbd{background:#eef0f6;padding:1px 5px;border-radius:4px;font-family:ui-monospace,monospace;font-size:11px}
 </style>
 </head>
 <body>
-  <h1>QuizKing · 答题王</h1>
-  <div class="section">
-    <div class="row">
-      <button data-k="selection">抓取选区</button>
-      <button data-k="visible">抓取截图</button>
-      <button data-k="page">抓取整页 ⚠</button>
-      <button data-k="show-fab" class="primary">显示/隐藏 王字气泡</button>
-    </div>
-    <div class="muted hint">
-      <div class="hint-title">快捷键（macOS 用 ⌘ 代替 Ctrl）</div>
-      <div class="hint-row"><kbd>Ctrl+Shift+Q</kbd> 抓取选区 — 先在页面选中文字</div>
-      <div class="hint-row"><kbd>Ctrl+Shift+E</kbd> 抓取截图 — 拖框裁剪后发给多模态 LLM</div>
-      <div class="hint-row"><kbd>Ctrl+Shift+P</kbd> 抓取整页 ⚠ 实验 — 把 innerText 前 6000 字符发给 LLM</div>
-      <div class="hint-row"><kbd>Ctrl+Shift+H</kbd> 显示/隐藏 王字气泡</div>
-      <div class="hint-tip">在 <code>chrome://extensions/shortcuts</code> 可改键。</div>
-    </div>
+<h1>🚀 QuizKing Ultimate</h1>
+<div class="section">
+  <div class="row">
+    <button class="primary" data-k="auto">🤖 自动答题（不交卷）</button>
   </div>
-  <div class="section">
-    <div class="muted" id="status">就绪。</div>
+  <div class="row">
+    <button data-k="detect">🔍 检测题目</button>
+    <button data-k="selection">📝 选区</button>
+    <button data-k="visible">📸 截图</button>
+    <button data-k="show-fab">王 按钮</button>
+    <button data-k="pause">⏸ 暂停/继续</button>
+    <button data-k="badge-toggle">答案显隐</button>
   </div>
-  <div class="footer">
-    <a id="opts">设置</a>
-    <span class="muted" id="keyState"></span>
+  <div class="muted hint">
+    <b>使用顺序：</b>先「🔍 检测题目」确认可作答，再「🤖 自动答题」<br>
+    <b>禁复制页面请用截图通道</b>（📸 框选）<br>
+    <b>快捷键：</b><br>
+    <kbd>Ctrl+Shift+F</kbd> 自动答题<br>
+    <kbd>Ctrl+Shift+Q</kbd> 选区<br>
+    <kbd>Ctrl+Shift+E</kbd> 截图<br>
+    <kbd>Ctrl+Shift+H</kbd> 气泡<br>
+    <b>快捷键无效？</b>可能被其他软件占用，到 <kbd>chrome://extensions/shortcuts</kbd> 查看并重新绑定（扩展内置页面级监听兜底，一般无需处理）
   </div>
-  <script src="popup.js"></script>
+</div>
+<div class="section"><div class="muted" id="status">就绪。</div></div>
+<div class="footer"><a id="opts">设置</a><a href="https://github.com/ops120/quizking" target="_blank" rel="noopener">GitHub</a><span class="muted" id="keyState"></span></div>
+<script src="popup.js"></script>
 </body>
 </html>

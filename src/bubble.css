@@ -65,12 +65,23 @@
   background: linear-gradient(180deg, #f7f8fc 0%, #eef1f8 100%);
   padding: 8px 10px;
   display: flex;
-#aqh-title-glyph { display: inline-block; width: 22px; height: 22px; line-height: 22px; text-align: center; background: #3563ff; color: #fff; border-radius: 6px; margin-right: 8px; font-family: "PingFang SC","Microsoft YaHei",Heiti,sans-serif; font-weight: 700; font-size: 14px; }
-#aqh-title-text { font-weight: 600; }
   align-items: center;
   gap: 8px;
   border-bottom: 1px solid rgba(0, 0, 0, 0.06);
   user-select: none;
+}
+#aqh-title-glyph {
+  display: inline-block;
+  width: 22px;
+  height: 22px;
+  line-height: 22px;
+  text-align: center;
+  background: #3563ff;
+  color: #fff;
+  border-radius: 6px;
+  font-family: "PingFang SC", "Microsoft YaHei", Heiti, sans-serif;
+  font-weight: 700;
+  font-size: 14px;
 }
 #aqh-title {
   font-weight: 600;
@@ -177,6 +188,9 @@
 .aqh-item.aqh-minority { border-color: #f2ddba; background: #fffdf8; }
 .aqh-item.aqh-item-fail { border-color: #f0d5d2; background: #fdf6f5; }
 .aqh-item .aqh-answer-block { margin: 0; }
+.aqh-answer-line { padding: 2px 0; border-bottom: 1px dashed #e4e8f2; line-height: 1.45; }
+.aqh-answer-line:last-child { border-bottom: 0; }
+.aqh-q-no { font-weight: 700; color: #3563ff; margin-right: 4px; }
 .aqh-item-reason { margin-top: 6px; }
 .aqh-item-reason > summary {
   cursor: pointer;
@@ -253,7 +267,7 @@
   position: fixed;
   inset: 0;
   background: rgba(0,0,0,0.25);
-  z-index: 2147483646;
+  z-index: 2147483647;
   cursor: crosshair;
 }
 .aqh-mask-hint {
@@ -268,3 +282,82 @@
   font-size: 12px;
   z-index: 2147483647;
 }
+.aqh-sel {
+  position: fixed;
+  display: none;
+  border: 1px solid #3563ff;
+  background: rgba(53, 99, 255, 0.15);
+  z-index: 2147483647;
+  pointer-events: none;
+}
+
+/* --- 行内答案徽标（answer-badge.js；选项页 inlineBadge 开关，默认关）---
+   借鉴沉浸式翻译双语渲染：font 包装（inline 默认 + 零 UA 样式）+
+   inline-block + margin 变量（视觉另起一行但不破坏 flex/grid）+
+   固定 min-height 占位（答案原位替换，选项零位移）。
+   站点 CSS 可能污染，关键属性一律 !important（与 .qku-* 遮罩同策略）。 */
+.qku-answer-badge {
+  display: inline-block !important;
+  vertical-align: top !important;
+  margin: var(--qku-badge-spacing, 8px) 0 !important;
+  border: 1px solid #5DCAA5 !important;
+  background: #E1F5EE !important;
+  border-radius: 8px !important;
+  padding: 6px 10px !important;
+  font-size: 12px !important;
+  line-height: 1.5 !important;
+  color: #04342C !important;
+  font-family: inherit !important;
+  min-height: 30px !important;
+  min-width: 220px !important;
+  box-sizing: border-box !important;
+}
+.qku-answer-badge.qku-pending {
+  border-style: dashed !important;
+  background: #F4FBF8 !important;
+  color: #0F6E56 !important;
+}
+.qku-answer-badge.qku-err {
+  border-color: #F09595 !important;
+  background: #FCEBEB !important;
+  color: #791F1F !important;
+}
+.qku-badge-spinner {
+  width: 11px; height: 11px;
+  border: 2px solid #9FE1CB;
+  border-top-color: #0F6E56;
+  border-radius: 50%;
+  display: inline-block;
+  animation: qku-badge-spin 0.7s linear infinite;
+  vertical-align: -1px;
+  margin-right: 6px;
+}
+@keyframes qku-badge-spin { to { transform: rotate(360deg); } }
+.qku-badge-head { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.qku-badge-ans { font-weight: 500; }
+.qku-badge-chip {
+  font-size: 11px;
+  border-radius: 999px;
+  padding: 1px 8px;
+  background: #EAF3DE;
+  color: #3B6D11;
+  border: 1px solid #C0DD97;
+}
+.qku-badge-chip-warn { background: #FAEEDA; color: #854F0B; border-color: #EF9F27; }
+.qku-badge-text { display: block; margin-top: 2px; word-break: break-word; white-space: pre-wrap; }
+.qku-badge-reason { margin-top: 4px; }
+.qku-badge-reason > summary { font-size: 11px; color: #0F6E56; cursor: pointer; list-style: none; }
+.qku-badge-reason > summary::-webkit-details-marker { display: none; }
+.qku-badge-reason > summary::before { content: "▸ "; }
+.qku-badge-reason[open] > summary::before { content: "▾ "; }
+.qku-badge-reason-text { display: block; margin-top: 2px; font-size: 11px; color: #085041; word-break: break-word; white-space: pre-wrap; }
+.qku-badge-pending-text, .qku-badge-err-text { word-break: break-word; }
+
+/* 显隐切换：qku-answer-state=off 时只藏内容不删 DOM（盒子与占位高度保留，不重排） */
+[qku-answer-state="off"] .qku-badge-ans,
+[qku-answer-state="off"] .qku-badge-chip,
+[qku-answer-state="off"] .qku-badge-text,
+[qku-answer-state="off"] .qku-badge-reason,
+[qku-answer-state="off"] .qku-badge-pending-text,
+[qku-answer-state="off"] .qku-badge-err-text { display: none !important; }
+[qku-answer-state="off"] .qku-answer-badge::after { content: "答案已隐藏"; font-size: 11px; color: #888780; }
