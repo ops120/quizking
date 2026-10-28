@@ -266,7 +266,9 @@
 .aqh-mask {
   position: fixed;
   inset: 0;
-  background: rgba(0,0,0,0.25);
+  /* 不给画面蒙底色：框选时页面观感与平时完全一致，看不出"正在框选"。
+     这层仍需铺满全屏——它负责捕获拖拽事件，只是不再着色。 */
+  background: transparent;
   z-index: 2147483647;
   cursor: crosshair;
 }
@@ -285,10 +287,28 @@
 .aqh-sel {
   position: fixed;
   display: none;
-  border: 1px solid #3563ff;
-  background: rgba(53, 99, 255, 0.15);
+  /* 不填充颜色，只留一圈细边框标出选区；外加白色描边，保证深浅背景上都看得清 */
+  border: 1px solid rgba(53, 99, 255, 0.95);
+  background: transparent;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.65);
   z-index: 2147483647;
   pointer-events: none;
+}
+
+/* 截图隐身：captureVisibleTab 前挂到 <html>，让扩展注入的 UI 全部退出画面。
+   截出来的图与原始页面一致，不带气泡/高亮/光标/徽标/遮罩等任何痕迹。 */
+html.qku-stealth #aqh-root,
+html.qku-stealth #aqh-fab,
+html.qku-stealth .qku-highlight,
+html.qku-stealth .qku-cursor,
+html.qku-stealth .qku-panel,
+html.qku-stealth .qku-answer-badge,
+html.qku-stealth .aqh-mask,
+html.qku-stealth .aqh-mask-hint,
+html.qku-stealth .aqh-sel {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
 }
 
 /* --- 行内答案徽标（answer-badge.js；选项页 inlineBadge 开关，默认关）---

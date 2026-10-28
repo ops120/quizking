@@ -231,10 +231,29 @@
     return sel ? sel.toString().trim() : '';
   }
 
+  // 截图前先让扩展自己注入的 UI 全部隐身：气泡 / FAB / 高亮框 / 虚拟光标 / 消息面板 /
+  // 答案徽标 / 框选遮罩。captureVisibleTab 抓的是浏览器合成后的画面，页面上看得见的
+  // 东西一律会被截进去——截出来的图要保持和"用户肉眼看到的原始页面"一致，不留下
+  // 任何"这个画面被处理过"的痕迹。
+  // 关键：隐身靠 <html> 挂 class（CSS 见 bubble.css 的 html.qku-stealth），且必须等
+  // 浏览器完成重绘再调用截图 API，否则抓到的仍是带 UI 的那一帧。
+  function nextFrames() {
+    return new Promise(r => requestAnimationFrame(() => requestAnimationFrame(() => r())));
+  }
+
   async function captureVisibleScreenshot() {
-    const res = await callBg('aqh/capture-visible-tab');
-    if (!res?.ok) throw new Error((res?.error) || '截图失败');
-    return res.dataUrl;
+    const rootEl = document.documentElement;
+    rootEl.classList.add('qku-stealth');
+    try {
+      await nextFrames();
+      // 兜底等待：省电节流 / 后台标签页下 rAF 会被降频，补一小段确保合成完成
+      await new Promise(r => setTimeout(r, 60));
+      const res = await callBg('aqh/capture-visible-tab');
+      if (!res?.ok) throw new Error((res?.error) || '截图失败');
+      return res.dataUrl;
+    } finally {
+      rootEl.classList.remove('qku-stealth');
+    }
   }
 
   async function chooseCropAndCapture() {
@@ -300,6 +319,9 @@
         const c = document.createElement('canvas');
         c.width = Math.min(1600, rect.width*dpr); c.height = rect.height*dpr*(c.width/(rect.width*dpr));
         const ctx = c.getContext('2d');
+        // JPEG 不支持透明：源 PNG 若带透明像素，不先铺底就会变成黑块
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0, 0, c.width, c.height);
         ctx.drawImage(img, rect.left*dpr, rect.top*dpr, rect.width*dpr, rect.height*dpr, 0, 0, c.width, c.height);
         resolve(c.toDataURL('image/jpeg',0.85));
       };
