@@ -272,6 +272,13 @@
       const sel = document.createElement('div'); sel.id='aqh-sel'; sel.className='aqh-sel';
       document.documentElement.appendChild(sel);
 
+      // 框选期间禁用原生文本选中：拖动时浏览器会把划过的文字标成蓝色选区，
+      // 那片蓝色是浏览器自带的 ::selection，不是本扩展画的，但看起来就像"蓝色填充"
+      const prevUserSelect = document.documentElement.style.userSelect;
+      document.documentElement.style.userSelect = 'none';
+      // 同时清掉可能已经存在的选区（用户在唤起框选前选中过文字的情况）
+      try { window.getSelection?.()?.removeAllRanges(); } catch(e) {}
+
       // 遮罩层级低于气泡/FAB，框选期间先隐藏它们，保证右下角也能完整框选
       const hiddenEls = ['aqh-root', 'aqh-fab']
         .map(id => document.getElementById(id))
@@ -287,6 +294,7 @@
         finished = true;
         [mask,hint,sel].forEach(e => { if (e && e.parentNode) e.remove(); });
         hiddenEls.forEach((el, i) => { el.style.display = prevDisplay[i]; });
+        document.documentElement.style.userSelect = prevUserSelect;
         window.removeEventListener('mousemove', onMove);
         window.removeEventListener('keydown', onKey);
         window.removeEventListener('unload', cleanup);
