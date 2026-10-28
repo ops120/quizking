@@ -287,8 +287,10 @@
 .aqh-sel {
   position: fixed;
   display: none;
-  /* 临时验证用：醒目绿框，确认改动链路生效后再调回低调度 */
-  border: 2px solid #00c853;
+  /* 不填充、不蒙色、不加描边：只留一圈极淡的虚线标出选区边界。
+     框选期间真正的"蓝色填充"来自浏览器原生 ::selection，已在 content.js 中
+     通过 user-select:none 禁用（pickRectOnPage）。 */
+  border: 1px dashed rgba(53, 99, 255, 0.38);
   background: transparent;
   z-index: 2147483647;
   pointer-events: none;

@@ -297,7 +297,9 @@
         document.documentElement.style.userSelect = prevUserSelect;
         window.removeEventListener('mousemove', onMove);
         window.removeEventListener('keydown', onKey);
-        window.removeEventListener('unload', cleanup);
+        // pagehide 而非 unload：Chrome 已对 unload 施加权限策略限制（Permissions
+        // policy violation），且 unload 会阻止页面进入往返缓存（bfcache）
+        window.removeEventListener('pagehide', cleanup);
       }
       
       function done(rect) {
@@ -315,7 +317,8 @@
       mask.addEventListener('contextmenu',e=>e.preventDefault());
       window.addEventListener('mousemove',onMove);
       window.addEventListener('keydown',onKey);
-      window.addEventListener('unload', cleanup); // 页面卸载时清理
+      // pagehide 而非 unload：unload 已被 Chrome 施加权限策略限制，且会阻止 bfcache
+      window.addEventListener('pagehide', cleanup);
     });
   }
 
