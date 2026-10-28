@@ -64,7 +64,9 @@ window.QuizHighlight = (() => {
       .qku-panel.qa-warn{border-color:rgba(255,193,7,0.5)!important}
       .qku-panel.qa-ok{border-color:rgba(76,175,80,0.5)!important}
     `;
-    document.head.appendChild(style);
+    // head 在极少数上下文（文档未就绪的 iframe）可能为 null，兜底挂到根元素，
+    // 避免抛 "Cannot read properties of null (reading 'appendChild')"
+    (document.head || document.documentElement).appendChild(style);
   }
 
   // doc：可选，题目所在的 iframe 文档；遮罩会画在该文档内（position:fixed 相对其视口，位置正好吻合）
