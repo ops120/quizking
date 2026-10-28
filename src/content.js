@@ -257,6 +257,11 @@
   }
 
   async function chooseCropAndCapture() {
+    // 进入框选前刷新一次配置：选项页改完「选框样式」无需重载页面即可生效
+    try {
+      const fresh = ((await callBg('aqh/get-config')) || {}).cfg;
+      if (fresh) cfg = fresh;
+    } catch (e) {}
     const full = await captureVisibleScreenshot();
     const rect = await pickRectOnPage();
     if (!rect) return full;
@@ -270,6 +275,19 @@
       const hint = document.createElement('div'); hint.id='aqh-mask-hint'; hint.className='aqh-mask-hint'; hint.textContent='拖动框选区域，ESC取消';
       document.documentElement.appendChild(hint);
       const sel = document.createElement('div'); sel.id='aqh-sel'; sel.className='aqh-sel';
+      sel.dataset.qku = '1'; // 本扩展标记：CSS 里据此隐藏同名的第三方/旧版选框
+      // 内联 !important：优先级高于任何样式表规则（含旧 content script 残留在页面上的旧规则、
+      // 以及同页面其他扩展注入的样式），确保这个框长什么样只由本行代码决定。
+      // 选框样式：blue = 原版（蓝边 + 淡蓝填充）｜none = 全透明（不画框，只剩十字光标）
+      const boxMode = (cfg && cfg.captureBox) === 'none' ? 'none' : 'blue';
+      if (boxMode === 'none') {
+        sel.style.setProperty('border', 'none', 'important');
+        sel.style.setProperty('background', 'transparent', 'important');
+        sel.style.setProperty('box-shadow', 'none', 'important');
+      } else {
+        sel.style.setProperty('border', '1px solid #3563ff', 'important');
+        sel.style.setProperty('background', 'rgba(53, 99, 255, 0.15)', 'important');
+      }
       document.documentElement.appendChild(sel);
 
       // 框选期间禁用原生文本选中：拖动时浏览器会把划过的文字标成蓝色选区，

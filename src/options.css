@@ -34,6 +34,17 @@ label input[type=text], label input[type=password], label textarea {
   background: #fff;
 }
 label textarea { resize: vertical; min-height: 110px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; }
+label select {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #d8dbe5;
+  border-radius: 8px;
+  font: inherit;
+  outline: none;
+  background: #fff;
+  color: #3b3f51;
+}
+label select:focus { border-color: #3563ff; }
 label input[type=text]:focus, label input[type=password]:focus, label textarea:focus { border-color: #3563ff; }
 input[type=range] { width: 100%; }
 .chk { display: flex; align-items: center; gap: 8px; font-size: 13px; }

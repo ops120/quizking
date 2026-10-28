@@ -13,7 +13,8 @@ const DEFAULTS = {
   autoBatch: 5,
   silentMode: false,
   inlineBadge: false,
-  visualFx: true
+  visualFx: true,
+  captureBox: 'blue'
 };
 
 // ===== 配置管理 =====

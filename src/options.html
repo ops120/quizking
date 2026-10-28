@@ -27,6 +27,12 @@
     <label class="chk"><input id="silentMode" type="checkbox" />静默模式（只答题不弹气泡）</label>
     <label class="chk"><input id="visualFx" type="checkbox" />自动答题视觉特效（高亮遮罩 / 虚拟光标 / 消息面板；关闭后仅保留气泡内的答案展示）</label>
     <label class="chk"><input id="inlineBadge" type="checkbox" />行内答案徽标（在每题下方显示答案与解析，不影响自动点击；可用 popup「答案显隐」随时收起）</label>
+    <label>框选截图时的选框样式
+      <select id="captureBox">
+        <option value="blue">1 · 原版蓝框（蓝色边框 + 淡蓝填充）</option>
+        <option value="none">2 · 全透明框（不显示框，仅鼠标变十字）</option>
+      </select>
+    </label>
     <label>每题延迟（ms）<span id="delayV">300</span>
       <input id="autoDelay" type="range" min="100" max="2000" step="50" value="300" />
     </label>

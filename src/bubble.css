@@ -266,9 +266,10 @@
 .aqh-mask {
   position: fixed;
   inset: 0;
-  /* 不给画面蒙底色：框选时页面观感与平时完全一致，看不出"正在框选"。
-     这层仍需铺满全屏——它负责捕获拖拽事件，只是不再着色。 */
-  background: transparent;
+  /* !important 是必需的：扩展重载后，旧 content script 注入的 <style> 仍留在
+     页面 DOM 里，旧规则与新规则特异性相同、靠后的胜出。只有 !important 才能
+     与之无关顺序地强制生效，否则改颜色/底色在旧页面上永远看不到变化。 */
+  background: transparent !important;
   z-index: 2147483647;
   cursor: crosshair;
 }
@@ -286,14 +287,21 @@
 }
 .aqh-sel {
   position: fixed;
-  /* 完全不显示选区框：拖动时画面与平时一模一样，看不出在框选。
-     用 !important 压住 content.js 中 onDown 设的 style.display='block'；
-     选区范围由 JS 里的坐标计算，不依赖这个元素的可见性。 */
-  display: none !important;
-  border: none;
-  background: transparent;
+  display: none;
+  /* 兜底值（实际由 content.js 按 captureBox 配置用内联 !important 覆盖）：
+     blue=原版蓝框 / none=全透明框 */
+  border: 1px solid #3563ff !important;
+  background: rgba(53, 99, 255, 0.15) !important;
   z-index: 2147483647;
   pointer-events: none;
+}
+
+/* 保险：页面上若同时出现另一个同名 #aqh-sel（旧脚本残留 / 第三方扩展），
+   它不带本扩展的 data-qku 标记，直接隐藏，避免它以旧样式盖住我们的框。 */
+#aqh-sel:not([data-qku]) {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
 }
 
 /* 截图隐身：captureVisibleTab 前挂到 <html>，让扩展注入的 UI 全部退出画面。

@@ -1,5 +1,5 @@
 /* QuizKing Ultimate — options.js (based on QuizKing original + autoDelay) */
-const FIELDS = ["providers","temperature","systemPrompt","promptMode","reasoningPrompt","bubbleOpacity","saveHistory","autoDelay","autoBatch","silentMode","visualFx","inlineBadge"];
+const FIELDS = ["providers","temperature","systemPrompt","promptMode","reasoningPrompt","bubbleOpacity","saveHistory","autoDelay","autoBatch","silentMode","visualFx","inlineBadge","captureBox"];
 // LEGACY_KEYS 仅用于向后兼容：从旧版单-provider 配置迁移到新版 providers[] 数组
 const LEGACY_KEYS = ["endpoint","apiKey","model"];
 const PROVIDER_DEFAULTS = { endpoint: "https://api.openai.com/v1", model: "gpt-4o-mini" };
@@ -90,6 +90,7 @@ function load() {
     $("batchV").textContent = $("autoBatch").value;
     $("silentMode").checked = !!cfg.silentMode;
     $("visualFx").checked = (cfg.visualFx===undefined?true:!!cfg.visualFx);
+    $("captureBox").value = (cfg.captureBox === "none") ? "none" : "blue";
     const mode = (cfg.promptMode==="answer"||!cfg.promptMode)?"reason":cfg.promptMode;
     const radio = document.querySelector('input[name="promptMode"][value="'+mode+'"]');
     if (radio) radio.checked = true;
@@ -109,7 +110,7 @@ function markDirty() { if(dirty)return;dirty=true;$("saveRes").textContent="● 
 function clearDirty() { dirty=false;$("saveRes").classList.remove("aqh-dirty"); }
 
 function save() {
-  const next = { providers:collectProviders(), temperature:Number($("temperature").value), systemPrompt:$("systemPrompt").value, promptMode:getMode(), reasoningPrompt:$("reasoningPrompt").value, bubbleOpacity:Number($("bubbleOpacity").value), saveHistory:$("saveHistory").checked, autoDelay:parseInt($("autoDelay").value), autoBatch:parseInt($("autoBatch").value), silentMode:!!$("silentMode").checked, visualFx:!!$("visualFx").checked, inlineBadge:!!$("inlineBadge").checked };
+  const next = { providers:collectProviders(), temperature:Number($("temperature").value), systemPrompt:$("systemPrompt").value, promptMode:getMode(), reasoningPrompt:$("reasoningPrompt").value, bubbleOpacity:Number($("bubbleOpacity").value), saveHistory:$("saveHistory").checked, autoDelay:parseInt($("autoDelay").value), autoBatch:parseInt($("autoBatch").value), silentMode:!!$("silentMode").checked, visualFx:!!$("visualFx").checked, inlineBadge:!!$("inlineBadge").checked, captureBox:$("captureBox").value };
   chrome.storage.sync.set(next, () => {
     const err = chrome.runtime?.lastError;
     if (err) { $("saveRes").textContent = "保存失败："+(err.message||""); return; }
@@ -165,7 +166,7 @@ document.addEventListener("DOMContentLoaded", () => {
   $("clearHistory").addEventListener("click", clearHistory);
   $("viewHistory").addEventListener("click", loadHistory);
   document.querySelectorAll('input[name="promptMode"]').forEach(r => r.addEventListener("change",()=>{refreshPromptBoxes();markDirty();}));
-  ["systemPrompt","reasoningPrompt","saveHistory","silentMode","visualFx","inlineBadge"].forEach(id=>{const el=$(id);if(el)el.addEventListener(el.type==="checkbox"?"change":"input",markDirty);});
+  ["systemPrompt","reasoningPrompt","saveHistory","silentMode","visualFx","inlineBadge","captureBox"].forEach(id=>{const el=$(id);if(el)el.addEventListener(el.type==="checkbox"?"change":"input",markDirty);});
   $("temperature").addEventListener("input",e=>{$("tempV").textContent=Number(e.target.value).toFixed(1);markDirty();});
   $("bubbleOpacity").addEventListener("input",e=>{$("opaV").textContent=Number(e.target.value).toFixed(2);markDirty();});
   $("autoDelay").addEventListener("input",e=>{$("delayV").textContent=e.target.value;markDirty();});
