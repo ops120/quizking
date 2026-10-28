@@ -286,11 +286,11 @@
 }
 .aqh-sel {
   position: fixed;
-  display: none;
-  /* 不填充、不蒙色、不加描边：只留一圈极淡的虚线标出选区边界。
-     框选期间真正的"蓝色填充"来自浏览器原生 ::selection，已在 content.js 中
-     通过 user-select:none 禁用（pickRectOnPage）。 */
-  border: 1px dashed rgba(53, 99, 255, 0.38);
+  /* 完全不显示选区框：拖动时画面与平时一模一样，看不出在框选。
+     用 !important 压住 content.js 中 onDown 设的 style.display='block'；
+     选区范围由 JS 里的坐标计算，不依赖这个元素的可见性。 */
+  display: none !important;
+  border: none;
   background: transparent;
   z-index: 2147483647;
   pointer-events: none;
