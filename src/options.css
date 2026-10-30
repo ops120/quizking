@@ -151,3 +151,55 @@ footer {
   gap: 12px;
   align-items: center;
 }
+
+/* ===== 参考资料（本地 Markdown）===== */
+.ref-drop {
+  border: 1px dashed #c9cdda;
+  border-radius: 10px;
+  padding: 16px;
+  margin: 8px 0 4px;
+  text-align: center;
+  font-size: 13px;
+  color: #6b7080;
+  background: #fafbff;
+  transition: border-color .15s, background .15s;
+}
+.ref-drop.over { border-color: #3563ff; background: #f0f4ff; }
+.ref-list { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.ref-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 8px 12px;
+  border: 1px solid #eaeaf2;
+  border-radius: 8px;
+  background: #fff;
+}
+.ref-item .r-on { flex: 0 0 auto; margin: 0; font-size: 12px; }
+.ref-item .r-name {
+  flex: 1 1 200px;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.ref-item .r-name:hover { color: #3563ff; }
+.ref-item .r-size { flex: 0 0 auto; }
+.ref-item .r-del { flex: 0 0 auto; padding: 4px 10px; color: #b3261e; border-color: #f0d5d2; }
+.ref-item .r-del:hover { border-color: #b3261e; color: #b3261e; background: #fdf4f3; }
+.ref-item .r-preview {
+  flex: 1 1 100%;
+  margin: 0;
+  max-height: 160px;
+  overflow: auto;
+  padding: 8px 10px;
+  background: #f6f7fb;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: #3b3f51;
+}

@@ -53,6 +53,47 @@
   </section>
 
   <section>
+    <h2>📚 参考资料（本地 Markdown）</h2>
+    <p class="muted">
+      导入本地 <code>.md</code> / <code>.txt</code> 文档作为答题依据。答题时按题干自动检索最相关的段落，随题目一起发给模型
+      —— 答案来自你的资料，而不是模型的记忆。检索在本地完成，不额外花钱；只把命中的段落（默认 ≤2400 字）带进 prompt。
+    </p>
+
+    <div id="refDrop" class="ref-drop">
+      <div>把 .md / .txt 文件拖到这里</div>
+      <div class="muted" style="margin-top:6px">或 <button id="refPick" type="button">选择文件</button>（可多选）</div>
+      <input id="refFile" type="file" multiple accept=".md,.markdown,.txt,text/markdown,text/plain" hidden />
+    </div>
+
+    <div id="refList" class="ref-list"></div>
+    <div class="row">
+      <span id="refStat" class="muted">未导入文档</span>
+      <button id="refClear" type="button">清空全部</button>
+    </div>
+
+    <label class="chk"><input id="refEnabled" type="checkbox" checked />启用参考资料（答题时自动检索并注入）</label>
+    <label class="chk"><input id="dualMode" type="checkbox" />对照模式：每题并列显示「本地资料原文」和「LLM 答案」，<b>不自动填写</b>，你点「采用 LLM 答案」才填、点「都不对」标记为待手工处理</label>
+    <label>资料没覆盖题目时
+      <select id="refMode">
+        <option value="prefer">优先用资料；资料没写就按通用知识作答（推荐）</option>
+        <option value="strict">严格：资料没写就回答「资料未涉及」，不凭记忆作答</option>
+      </select>
+    </label>
+    <label>每题引用段落数 <span id="refTopKV">4</span>
+      <input id="refTopK" type="range" min="1" max="8" step="1" value="4" />
+    </label>
+    <label>引用总字数上限 <span id="refCharsV">2400</span>
+      <input id="refMaxChars" type="range" min="400" max="6000" step="200" value="2400" />
+    </label>
+
+    <label>检索测试（粘贴一道题，看会引用哪些段落——排查"为什么没带资料"用）
+      <textarea id="refQuery" rows="2" placeholder="例：TCP 建立连接为什么需要三次握手？"></textarea>
+    </label>
+    <div class="row"><button id="refTest" type="button">测试检索</button><span id="refTestRes" class="muted"></span></div>
+    <div id="refTestBox" class="history"></div>
+  </section>
+
+  <section>
     <h2>Prompt 模式</h2>
     <label class="chk"><input type="radio" name="promptMode" value="reason" checked />答案 + 解析（默认）</label>
     <div id="reasoningBox" class="promptBox">

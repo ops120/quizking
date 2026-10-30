@@ -2,6 +2,8 @@
  * QuizKing Ultimate — background.js
  * service worker：命令路由 / LLM 并行请求 / 存储 / 自动答题编排
  */
+import { indexDocuments, search, buildRefPrompt, buildFullRefPrompt, toSnippets } from './refs.js';
+
 const DEFAULTS = {
   temperature: 0.1,
   bubbleOpacity: 0.95,
@@ -13,9 +15,21 @@ const DEFAULTS = {
   autoBatch: 5,
   silentMode: false,
   inlineBadge: false,
+  // 对照模式：每题同时给出「本地资料原文」与「LLM 答案」，都不自动填写，
+  // 由用户点选后才执行。本地资料只原样展示，不抽答案、不改写。
+  dualMode: false,
   visualFx: true,
-  captureBox: 'blue'
+  captureBox: 'blue',
+  // ===== 本地参考资料（Markdown 知识库）=====
+  refEnabled: true,      // 导入文档后即生效；无文档时零影响
+  refMode: 'prefer',     // prefer=资料优先、缺失则用通用知识；strict=资料缺失就答"资料未涉及"
+  refTopK: 4,            // 每题最多引用几段
+  refMaxChars: 2400      // 注入的资料总字数上限（控制 token 成本）
 };
+
+// 参考资料容量上限（chrome.storage.local 默认配额约 10MB，按 UTF-16 存储，留足余量）
+const REF_MAX_DOC_CHARS = 600000;
+const REF_MAX_TOTAL_CHARS = 2400000;
 
 // ===== 配置管理 =====
 // LLM 服务商统一在选项页手动填写（providers[]），此处不再内置任何默认密钥。
@@ -138,10 +152,112 @@ function parseAnswer(raw) {
 }
 
 // ===== 并行扇出 =====
+// ===== 本地参考资料（Markdown 知识库）=====
+// 文档原样存在 chrome.storage.local 的 refDocs 里；
+// 索引（分词倒排）只放内存，service worker 休眠后按需重建（10 万字约 20ms）。
+let _refCache = null; // { sig, index, chunkCount, docCount, builtAt }
+let _refWarm = false;
+
+function loadRefDocs() {
+  return new Promise(res => {
+    try {
+      chrome.storage.local.get({ refDocs: [] }, o => res(Array.isArray(o.refDocs) ? o.refDocs : []));
+    } catch (e) { res([]); }
+  });
+}
+
+function refSignature(docs) {
+  return docs.map(d => d.id + ':' + (d.chars || (d.text ? d.text.length : 0))).join('|');
+}
+
+async function getRefIndex() {
+  const all = await loadRefDocs();
+  const docs = all.filter(d => d.enabled !== false && d.text);
+  if (!docs.length) return null;
+
+  const sig = refSignature(docs);
+  if (_refCache && _refCache.sig === sig) return _refCache;
+
+  const t0 = Date.now();
+  const built = indexDocuments(docs.map(d => ({ id: d.id, name: d.name, text: d.text })));
+  const totalChars = docs.reduce((n, d) => n + (d.text ? d.text.length : 0), 0);
+  // 资料很小时准备全文（≤8k 字，覆盖所有可能的 refMaxChars 设置），供"全量注入"用
+  const fullText = totalChars <= 8000
+    ? docs.map(d => '【' + (d.name || '未命名') + '】\n' + String(d.text || '').trim()).join('\n\n')
+    : '';
+  _refCache = {
+    sig,
+    index: built.index,
+    chunkCount: built.chunkCount,
+    docCount: docs.length,
+    totalChars,
+    fullText,
+    builtAt: Date.now()
+  };
+  bgLog('[refs] 索引就绪：', built.chunkCount, '块 /', docs.length, '份文档 /', totalChars, '字 /', Date.now() - t0, 'ms');
+  return _refCache;
+}
+
+// 文档增删改后索引必须失效，否则会引用旧内容
+if (!_refWarm) {
+  _refWarm = true;
+  try {
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (area === 'local' && changes.refDocs) _refCache = null;
+    });
+  } catch (e) { void e; }
+}
+
+// 把检索到的资料段落前置到题目文本（截图模式无文本可检索，跳过）
+// 返回 { payload, refCount, hits }：hits 是命中的原始段落，供「对照模式」原样展示
+async function injectRefs(payload, cfg) {
+  const none = { payload, refCount: 0, hits: [] };
+  if (!payload || !cfg || cfg.refEnabled === false) return none;
+  if (payload.mode === 'image') return none;
+  const q = String(payload.text || '').trim();
+  if (q.length < 4) return none;
+
+  let cache = null;
+  try { cache = await getRefIndex(); } catch (e) { bgLog('[refs] 建索引失败:', e?.message || e); return none; }
+  if (!cache) return none;
+
+  const maxChars = Number(cfg.refMaxChars) || 2400;
+
+  // 小资料全量注入：总量不超上限时直接全文带上，避免分段检索漏召回
+  if (cache.fullText && cache.totalChars <= maxChars) {
+    bgLog('[refs] 资料量小（', cache.totalChars, '字），全文注入');
+    return {
+      payload: { ...payload, text: buildFullRefPrompt(cache.fullText, cfg.refMode) + '\n\n' + payload.text },
+      refCount: cache.docCount || 1,
+      // 全文注入时没有"命中段落"的概念，整篇就是本地资料
+      hits: [{ chunk: { section: '', text: cache.fullText }, docName: '全部资料', score: 0 }]
+    };
+  }
+
+  let hits = [];
+  try {
+    hits = search(cache.index, q, { topK: Number(cfg.refTopK) || 4, maxChars });
+  } catch (e) { bgLog('[refs] 检索异常:', e?.message || e); return none; }
+
+  if (!hits.length) return none;
+  bgLog('[refs] 命中', hits.length, '段 ←',
+    hits.map(h => (h.docName || '未命名') + (h.chunk.section ? '#' + h.chunk.section : '')).join(' | '));
+
+  return {
+    payload: { ...payload, text: buildRefPrompt(hits, cfg.refMode) + '\n\n' + payload.text },
+    refCount: hits.length,
+    hits
+  };
+}
+
 async function askAll(payload, onItem) {
   const cfg = await ensureDefaults();
   const active = activeProviders(cfg);
   if (!active.length) throw new Error('未配置LLM，请在选项页添加服务商');
+
+  const injected = await injectRefs(payload, cfg);
+  payload = injected.payload;
+  const refCount = injected.refCount || 0;
 
   const items = new Array(active.length);
   await Promise.all(active.map(async (p, i) => {
@@ -149,13 +265,17 @@ async function askAll(payload, onItem) {
     try {
       const t0 = Date.now();
       const r = await callProvider(p, payload, cfg);
-      item = { id: p.id, label: p.label, model: p.model, ok: true, answer: r.answer, reasoning: r.reasoning, raw: r.raw, ms: Date.now() - t0 };
+      item = { id: p.id, label: p.label, model: p.model, ok: true, answer: r.answer, reasoning: r.reasoning, raw: r.raw, ms: Date.now() - t0, refs: refCount };
     } catch (e) {
-      item = { id: p.id, label: p.label, model: p.model, ok: false, error: (e?.message) || String(e), ms: null };
+      item = { id: p.id, label: p.label, model: p.model, ok: false, error: (e?.message) || String(e), ms: null, refs: refCount };
     }
     items[i] = item;
     if (onItem) { try { onItem(item); } catch(e) { void e; } }
   }));
+  // 挂在数组上的旁路字段：保持返回类型不变，其它调用点无需改动。
+  // 对照模式要用命中段落原文，普通通道不读它。
+  items.__refHits = injected.hits || [];
+  items.__refCount = refCount;
   return items;
 }
 
@@ -264,13 +384,50 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       if (msg.type === 'aqh/test') {
         const cfg = await ensureDefaults();
         const safe = cfg.providers.map(({ apiKey, ...p }) => ({ ...p, hasKey: !!apiKey }));
+        const refDocs = (await loadRefDocs()).filter(d => d.enabled !== false).length;
         return sendResponse({
           ok: true,
           cfg: safe,
           hasKey: safe.some(p => p.enabled && p.hasKey),
           providerCount: safe.filter(p => p.enabled).length,
           silentMode: !!cfg.silentMode,
+          refEnabled: cfg.refEnabled !== false,
+          refDocs,
+          dualMode: !!cfg.dualMode,
           status: lastStatus
+        });
+      }
+
+      // 参考资料：检索预览（选项页「测试检索」用，也用于排查"为什么没引用资料"）
+      if (msg.type === 'refs/search') {
+        const q = String(msg.payload?.query || '').trim();
+        const docs = await loadRefDocs();
+        if (!docs.length) {
+          return sendResponse({ ok: true, docs: 0, chunks: 0, hits: [], note: '尚未导入任何文档' });
+        }
+        const cache = await getRefIndex();
+        if (!cache) {
+          return sendResponse({ ok: true, docs: docs.length, chunks: 0, hits: [], note: '文档均已停用' });
+        }
+        if (!q) {
+          return sendResponse({
+            ok: true, docs: cache.docCount, chunks: cache.chunkCount, hits: [],
+            note: '共 ' + cache.docCount + ' 份文档、' + cache.chunkCount + ' 个可检索段落'
+          });
+        }
+        const hits = search(cache.index, q, { topK: 5, maxChars: 4000 });
+        return sendResponse({
+          ok: true,
+          docs: cache.docCount,
+          chunks: cache.chunkCount,
+          hits: hits.map(h => ({
+            docName: h.docName || '未命名',
+            section: h.chunk.section || '',
+            score: Math.round(h.score * 100) / 100,
+            chars: h.chunk.chars,
+            preview: h.chunk.text.slice(0, 240)
+          })),
+          note: hits.length ? ('命中 ' + hits.length + ' 段') : '未命中：这段文字与资料相关度太低，答题时不会注入资料'
         });
       }
 
@@ -370,6 +527,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         }
 
         // 批量并行推理
+        const refMap = {};   // index → 本地资料原文片段（对照模式展示用）
         const answers = await Promise.all(questions.map(async q => {
           const isMulti = q.type === 'multi_choice';
           let prompt = q.stem + '\n';
@@ -383,33 +541,47 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           try {
             const items = await askAll({ mode: 'text', text: prompt });
             const best = getBestAnswer(items);
-            bgLog('题', q.index, '服务商返回:', items.map(it => it.ok ? ('OK(' + (it.ms||0) + 'ms)') : ('FAIL:' + it.error)).join(' | '));
+            const refUsed = (items.find(it => it.refs > 0) || {}).refs || 0;
+            // 命中的资料原文（不加工），供页面并排显示；无关题返回空数组
+            refMap[q.index] = toSnippets(items.__refHits, { maxItems: 2, maxChars: 400 });
+            bgLog('题', q.index, '服务商返回:', items.map(it => it.ok ? ('OK(' + (it.ms||0) + 'ms)') : ('FAIL:' + it.error)).join(' | '),
+                  refUsed ? ('| 引用资料 ' + refUsed + ' 段') : '');
             if (best) {
               bgLog('题', q.index, '最佳答案:', JSON.stringify(best.answer).slice(0, 120));
               if (isMulti) {
                 // "A,C" or "AC" → both should work（已去重）
                 const idxs = lettersToIndices(best.answer.trim().toUpperCase().replace(/[^A-E,]/g, ''), q.options?.length || 0);
                 bgLog('题', q.index, '多选下标:', JSON.stringify(idxs));
-                return { index: q.index, answer: best.answer, reasoning: best.reasoning, optionIndices: idxs, isMulti: true, ok: true };
+                return { index: q.index, answer: best.answer, reasoning: best.reasoning, optionIndices: idxs, isMulti: true, ok: true, refs: refUsed };
               }
               const idx = resolveSingleIndex(best.answer, q.options);
               if (idx < 0) {
                 bgLog('题', q.index, '!! 无法解析出选项下标，原始答案:', JSON.stringify(best.answer).slice(0, 200));
-                return { index: q.index, answer: best.answer, reasoning: best.reasoning, optionIndex: -1, isMulti: false, ok: false,
+                return { index: q.index, answer: best.answer, reasoning: best.reasoning, optionIndex: -1, isMulti: false, ok: false, refs: refUsed,
                          error: '答案无法解析为选项（模型未按格式返回字母）：' + JSON.stringify(best.answer).slice(0, 80) };
               }
               bgLog('题', q.index, '单选下标:', idx);
-              return { index: q.index, answer: best.answer, reasoning: best.reasoning, optionIndex: idx, isMulti: false, ok: true };
+              return { index: q.index, answer: best.answer, reasoning: best.reasoning, optionIndex: idx, isMulti: false, ok: true, refs: refUsed };
             }
             bgLog('题', q.index, '!! 无可用答案（所有服务商均失败）');
-            return { index: q.index, answer: '', reasoning: '', optionIndex: -1, ok: false, error: '所有服务商推理失败' };
+            return { index: q.index, answer: '', reasoning: '', optionIndex: -1, ok: false, error: '所有服务商推理失败', refs: refUsed };
           } catch(e) {
             bgLog('题', q.index, '!! 推理异常:', e?.message || String(e));
-            return { index: q.index, answer: '', reasoning: '', optionIndex: -1, ok: false, error: e?.message || String(e) };
+            // null 表示"本次根本没检索"（如无可用服务商，askAll 在检索前就抛了），
+            // 与"检索了但没命中"（[]）区分开，页面文案才说得准
+            refMap[q.index] = null;
+            return { index: q.index, answer: '', reasoning: '', optionIndex: -1, ok: false, error: e?.message || String(e), refs: 0 };
           }
         }));
-        bgLog('auto-answer-batch: 返回', answers.filter(a => a.ok).length + '/' + answers.length, '题成功');
-        sendResponse({ ok: true, answers });
+        const withRefs = answers.filter(a => a.refs > 0).length;
+        answers.forEach(a => {
+          const v = refMap[a.index];
+          // null = 没检索过；[] = 检索了没命中；数组 = 命中原文
+          a.localRefs = (v === null) ? null : (v || []);
+        });
+        bgLog('auto-answer-batch: 返回', answers.filter(a => a.ok).length + '/' + answers.length, '题成功',
+              '｜引用资料', withRefs + '/' + answers.length, '题');
+        sendResponse({ ok: true, answers, refsUsed: withRefs });
         return true;
       }
 

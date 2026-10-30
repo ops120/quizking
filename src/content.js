@@ -530,7 +530,8 @@
     cfg = ((await callBg('aqh/get-config')) || {}).cfg || cfg;
     diag('配置: silentMode=' + !!cfg?.silentMode, 'hasKey=' + !!cfg?.hasKey,
          'providers=' + (cfg?.providers || []).map(p => p.id + '(enabled=' + p.enabled + ',hasKey=' + p.hasKey + ',model=' + p.model + ')').join(',') || '(无)',
-         'autoBatch=' + cfg?.autoBatch, 'autoDelay=' + cfg?.autoDelay);
+         'autoBatch=' + cfg?.autoBatch, 'autoDelay=' + cfg?.autoDelay,
+         'dualMode=' + !!cfg?.dualMode, 'refEnabled=' + (cfg?.refEnabled !== false));
 
     const { QuizSnapshot, QuizHighlight, AnswerExecutor } = window;
     if (!QuizSnapshot) { diag('QuizSnapshot 未加载'); log('QuizSnapshot not loaded'); return; }
@@ -607,15 +608,38 @@
       );
     }
 
-    let answered = 0, failed = 0;
-    const failedManual = []; // L2 降级：收集需人工接手的题（自动点击/推理失败）
+    let answered = 0, failed = 0, awaiting = 0;
+    const dual = !!cfg?.dualMode;  // 对照模式：本地资料 + LLM 答案并列，不自动填写
+
+    // 需人工处理的队列（src/manual-queue.js，纯逻辑、有单测）。
+    // 对照模式下用户是在循环结束「之后」才逐题点选，所以必须支持运行期增删：
+    // 只在结束时渲染一次的话，后续点「都不对」的题永远进不了清单。
+    // 该脚本缺失时只降级"清单"这个辅助功能，答题主流程不受影响。
+    const manual = (window.ManualQueue && window.ManualQueue.createQueue)
+      ? window.ManualQueue.createQueue()
+      : null;
+    if (!manual) diag('!! ManualQueue 未加载，需人工清单功能不可用（检查 manifest 脚本顺序）');
+
+    let manualShown = false;
+    const pushManual = (index, reason) => { if (manual) manual.add(index, reason); };
+    const dropManual = (index) => { if (manual) manual.remove(index); };
+    const refreshManual = () => {
+      if (!manual) return;
+      if (manual.size) {
+        manualShown = true;
+        renderManualList(manual.list(), targetDoc);
+      } else if (manualShown) {
+        manualShown = false;
+        try { closeBubble(); } catch (e) { void e; }
+      }
+    };
 
     // 分批并行推理
     const qs = snapshot.questions;
 
     // 行内答案徽标（选项页 inlineBadge 开关，默认关）：先清旧徽标再插占位，
     // 保证重复触发不叠徽标；占位盒固定高度，答案回来后原位替换，选项零位移。
-    if (window.QuizBadge && cfg?.inlineBadge) {
+    if (window.QuizBadge && (cfg?.inlineBadge || dual)) {
       QuizBadge.configure(cfg);
       QuizBadge.clear(targetDoc);
       QuizBadge.renderPending(targetDoc, qs);
@@ -633,6 +657,10 @@
       log('batch', batchStart + 1, '-', batchEnd, '响应:', JSON.stringify(batchRes).slice(0, 600));
       diag('批量响应 ok=' + !!(batchRes && batchRes.ok),
            batchRes && batchRes.ok ? ('answers=' + (batchRes.answers || []).length) : ('error=' + ((batchRes && batchRes.error) || '(无 error 字段，响应为 ' + JSON.stringify(batchRes) + ')')));
+      // 参考资料是否真的被引用（0 说明这道/这批没命中资料，走的是通用知识）
+      if (batchRes && batchRes.ok && typeof batchRes.refsUsed === 'number') {
+        diag('📚 引用资料:', batchRes.refsUsed + '/' + batch.length, '题');
+      }
       if (!batchRes?.ok) {
         // 整批失败：必须显式报错，不能静默 continue（否则只看到"N 失败"却无从判断原因）
         const err = (batchRes && batchRes.error) || '批量推理无响应（后台可能未返回，或消息通道已关闭）';
@@ -641,6 +669,11 @@
         diag('!! 整批失败:', err);
         setStatus('批量推理失败：' + err, false);
         if (!silent) QuizHighlight?.showPanel('❌ 批量推理失败', '第 ' + (batchStart+1) + '-' + batchEnd + ' 题', err);
+        // 这一批的占位徽标必须收尾，否则会永远停在「分析中」骗人
+        batch.forEach(qq => {
+          try { if (window.QuizBadge) QuizBadge.forceError(targetDoc, qq, err); } catch (e) { void e; }
+          pushManual(qq.index, '批量推理失败：' + err);
+        });
         continue;
       }
 
@@ -662,8 +695,23 @@
           log('题', q.index, '推理失败:', err, '| 原始返回:', JSON.stringify(res).slice(0, 300));
           diag('!! 题' + q.index, '推理失败:', err, '| 返回=', JSON.stringify(res).slice(0, 200));
           if (!silent) QuizHighlight?.showPanel('❌ 推理失败', '第 ' + (q.index+1) + ' 题', err);
+          pushManual(q.index, '推理失败：' + err);
+
+          // 对照模式：LLM 挂了也要把命中的资料原文摆出来——模型没答案时，资料才是唯一线索。
+          // 卡片里不给「采用」按钮（没有可采用的答案），只能标记为需手填。
+          if (dual && window.QuizBadge) {
+            const openedErr = QuizBadge.renderDual(targetDoc, q, {
+              refs: res.localRefs,
+              refsOff: cfg?.refEnabled === false,
+              llm: {},
+              error: err
+            }, {
+              reject: (badge) => QuizBadge.setDualState(badge, 'wrong', '❌ 已标记需手填')
+            });
+            if (openedErr) continue;
+            diag('!! 题' + q.index, '对照卡片插入失败（该题无锚点），退回行内标红');
+          }
           if (window.QuizBadge) QuizBadge.forceError(targetDoc, q, err);
-          failedManual.push({ index: q.index, reason: '推理失败：' + err });
           continue;
         }
 
@@ -677,6 +725,42 @@
         diag('题' + q.index, '答案=', JSON.stringify((res.answer || '').slice(0, 60)), '→ 选项', label, 'optionIndex=' + res.optionIndex);
         if (!silent) QuizHighlight?.showPanel('✅ 答案', label, res.reasoning);
 
+        // ===== 对照模式：并列「本地资料原文」与「LLM 答案」，等用户点选 =====
+        // 关键：这里绝不调用 executeAnswer —— 用户没做决定前不碰页面任何选项。
+        if (dual && window.QuizBadge) {
+          const opened = QuizBadge.renderDual(targetDoc, q, {
+            refs: res.localRefs,
+            refsOff: cfg?.refEnabled === false,
+            llm: { label, answer: res.answer, reasoning: res.reasoning }
+          }, {
+            useLlm: async (badge) => {
+              const ok2 = await AnswerExecutor.executeAnswer(q, answer, { dryRun: false, doc: targetDoc });
+              log('题', q.index, '对照模式·采用LLM →', ok2);
+              diag('题' + q.index, '对照模式·采用LLM →', ok2);
+              if (ok2) {
+                answered++;
+                dropManual(q.index);
+                QuizBadge.setDualState(badge, 'ok', '✅ 已采用 LLM 答案');
+              } else {
+                pushManual(q.index, '采用 LLM 答案但自动点击未生效，请手点');
+                QuizBadge.setDualState(badge, 'wrong', '⚠ 点击未生效，请手动勾选');
+              }
+              refreshManual();
+            },
+            reject: (badge) => {
+              log('题', q.index, '对照模式·用户标记都不对');
+              diag('题' + q.index, '对照模式：用户标记「都不对」');
+              pushManual(q.index, '两个答案都不对，需手动作答');
+              QuizBadge.setDualState(badge, 'wrong', '❌ 已标记「都不对」，请手动作答');
+              refreshManual();
+            }
+          });
+          // 只有卡片真的插上了才算"待定夺"；插不上要单独记进人工清单，否则用户找不到这题
+          if (opened) { awaiting++; }
+          else { pushManual(q.index, '对照卡片插入失败（该题无题目锚点），答案见诊断日志'); }
+          continue;
+        }
+
         const ok = await AnswerExecutor.executeAnswer(q, answer, { dryRun: false, doc: targetDoc });
         log('题', q.index, 'executeAnswer →', ok);
         diag('题' + q.index, 'executeAnswer →', ok);
@@ -688,7 +772,7 @@
           diag('!! 题' + q.index, '点击失败。选项数据=', JSON.stringify(q.options).slice(0, 250));
           // L2 自动降级：点不上的题，把答案标在题旁 + 高亮定位，交人工确认（不再只是报错）
           if (window.QuizBadge) QuizBadge.forceFill(targetDoc, q, res, false);
-          failedManual.push({ index: q.index, reason: '无法自动点击，答案已标在题旁' });
+          pushManual(q.index, '无法自动点击，答案已标在题旁');
           if (!silent) {
             QuizHighlight?.showPanel('⚠ 待你手点', '第 ' + (q.index+1) + ' 题', '答案已标在题目下方，请确认后手动点选');
             const root = QuizSnapshot.findQuestionRoot(targetDoc, q.index);
@@ -703,11 +787,21 @@
     }
 
     // 检查提交按钮（结果状态无论是否静默都推送，popup 可见）
-    const doneText = '✅ 完成！' + answered + '/' + snapshot.questions.length + ' 题已答' +
-      (failed ? ('（' + failed + ' 失败）') : '') +
-      (snapshot.submitButtons?.length ? '。交卷已拦截，请手动确认。' : '。');
+    const manualCount = manual ? manual.size : 0;
+    const doneText = dual
+      ? ('🖐 ' + awaiting + ' 题已并列「本地资料 / LLM」两个答案，未自动填写，请逐题点选' +
+         (failed ? ('；' + failed + ' 题推理失败') : '') +
+         (manualCount ? ('；' + manualCount + ' 题需手工处理') : '') +
+         (snapshot.submitButtons?.length ? '。交卷已拦截。' : '。'))
+      : ('✅ 完成！' + answered + '/' + snapshot.questions.length + ' 题已答' +
+         (failed ? ('（' + failed + ' 失败）') : '') +
+         (snapshot.submitButtons?.length ? '。交卷已拦截，请手动确认。' : '。'));
     if (!silent) {
-      if (snapshot.submitButtons?.length) {
+      if (dual) {
+        QuizHighlight?.showPanel('🖐 待你定夺', awaiting + ' 题已并列两个答案',
+          '每题下方都有「本地资料原文」和「LLM 答案」，点「采用 LLM 答案」才会自动填，判断都不对就点「都不对」。' +
+          (failed ? ('另有 ' + failed + ' 题 LLM 推理失败，卡片里只有资料、需手工填。') : ''));
+      } else if (snapshot.submitButtons?.length) {
         const btn = snapshot.submitButtons[0];
         QuizHighlight?.showPanel('🔒 完成', answered + '/' + snapshot.questions.length + ' 题已答（' + failed + ' 失败）', '未点击交卷按钮：「' + btn.text + '」。请自行检查后手动交卷。');
       } else {
@@ -715,11 +809,12 @@
       }
     }
     setStatus(doneText, false);
-    // 有失败就把诊断信息直接渲染出来（force 绕过静默模式），不必去翻控制台
-    if (failed > 0) {
-      diag('结果: ' + answered + ' 成功 / ' + failed + ' 失败');
+    // 有失败/待人工的题就把诊断信息直接渲染出来（force 绕过静默模式），不必去翻控制台
+    if (manualCount || failed > 0) {
+      diag('结果: ' + (dual ? ('待选择 ' + awaiting) : (answered + ' 成功')) + ' / ' + failed + ' 失败',
+           manualCount ? ('/ 待人工 ' + manualCount) : '');
       flushDiag();
-      renderManualList(failedManual, targetDoc);
+      refreshManual();
     }
   }
 

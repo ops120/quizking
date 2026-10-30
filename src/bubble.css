@@ -391,6 +391,77 @@ html.qku-stealth .aqh-sel {
 [qku-answer-state="off"] .qku-badge-err-text { display: none !important; }
 [qku-answer-state="off"] .qku-answer-badge::after { content: "答案已隐藏"; font-size: 11px; color: #888780; }
 
+/* --- 对照模式卡片（dualMode）：本地资料原文 + LLM 答案并列，用户自己定夺 ---
+   与自动作答徽标共用 .qku-answer-badge 外壳（复用 insertBefore 兄弟插入 + 防污染标记），
+   这里只覆盖成块级卡片。站点 CSS 五花八门，关键属性统一 !important。 */
+.qku-answer-badge.qku-dual-badge {
+  display: block !important;
+  min-width: 0 !important;
+  max-width: 620px !important;
+  width: 100% !important;
+  border-color: #C9D6E3 !important;
+  background: #FFFFFF !important;
+  color: #1F2937 !important;
+  padding: 10px 12px !important;
+}
+.qku-dual-head {
+  display: flex !important; align-items: center !important; justify-content: space-between !important;
+  gap: 8px !important; margin-bottom: 8px !important;
+  padding-bottom: 6px !important; border-bottom: 1px dashed #D8E0E8 !important;
+}
+.qku-dual-title { font-weight: 600 !important; color: #1F2937 !important; }
+.qku-dual-state {
+  font-size: 11px !important; color: #6B7280 !important; white-space: nowrap !important;
+  border: 1px solid #D8E0E8 !important; border-radius: 999px !important; padding: 0 8px !important;
+}
+.qku-dual-sec { margin: 8px 0 !important; }
+.qku-dual-label {
+  font-size: 11px !important; color: #6B7280 !important;
+  margin-bottom: 4px !important; letter-spacing: .2px !important;
+}
+.qku-dual-ans {
+  font-size: 15px !important; font-weight: 700 !important; color: #0F6E56 !important;
+  display: flex !important; align-items: baseline !important; gap: 8px !important; flex-wrap: wrap !important;
+}
+.qku-dual-ans-sub { font-size: 12px !important; font-weight: 400 !important; color: #4B5563 !important; }
+/* LLM 推理失败时（只出资料、无答案可言） */
+.qku-dual-err {
+  font-size: 12px !important; line-height: 1.6 !important;
+  color: #B42318 !important; background: #FEF3F2 !important;
+  border: 1px solid #FDA29B !important; border-radius: 6px !important;
+  padding: 6px 8px !important; word-break: break-word !important;
+}
+.qku-ref {
+  border: 1px solid #E5E7EB !important; border-radius: 6px !important;
+  background: #F9FAFB !important; padding: 6px 8px !important; margin-bottom: 5px !important;
+}
+.qku-ref > summary {
+  cursor: pointer !important; list-style: none !important;
+  font-size: 11px !important; color: #2563EB !important; word-break: break-all !important;
+}
+.qku-ref > summary::-webkit-details-marker { display: none !important; }
+.qku-ref > summary::before { content: "▸ " !important; }
+.qku-ref[open] > summary::before { content: "▾ " !important; }
+.qku-ref-full {
+  margin-top: 5px !important; font-size: 12px !important; line-height: 1.65 !important;
+  color: #374151 !important; white-space: pre-wrap !important; word-break: break-word !important;
+  max-height: 220px !important; overflow: auto !important;
+}
+.qku-ref-none { font-size: 11.5px !important; color: #9CA3AF !important; font-style: italic !important; }
+.qku-dual-actions { display: flex !important; gap: 8px !important; margin-top: 10px !important; flex-wrap: wrap !important; }
+.qku-btn {
+  font-family: inherit !important; font-size: 12px !important; line-height: 1.4 !important;
+  padding: 5px 14px !important; border-radius: 6px !important; cursor: pointer !important;
+  border: 1px solid #D1D5DB !important; background: #FFFFFF !important; color: #374151 !important;
+}
+.qku-btn-primary { background: #0F6E56 !important; border-color: #0F6E56 !important; color: #FFFFFF !important; }
+.qku-btn-primary:hover { background: #0B5A46 !important; }
+.qku-btn-ghost:hover { background: #F3F4F6 !important; }
+.qku-dual-done { font-size: 12px !important; color: #374151 !important; }
+.qku-answer-badge.qku-ok { border-color: #5DCAA5 !important; background: #E1F5EE !important; }
+.qku-answer-badge.qku-wrong { border-color: #F09595 !important; background: #FCEBEB !important; }
+[qku-answer-state="off"] .qku-dual { display: none !important; }
+
 /* L2 降级：失败清单气泡里的"题号"按钮 */
 .qku-manual-btn {
   display: inline-block; margin: 3px; padding: 4px 10px;

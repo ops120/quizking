@@ -1,5 +1,5 @@
 /* QuizKing Ultimate — options.js (based on QuizKing original + autoDelay) */
-const FIELDS = ["providers","temperature","systemPrompt","promptMode","reasoningPrompt","bubbleOpacity","saveHistory","autoDelay","autoBatch","silentMode","visualFx","inlineBadge","captureBox"];
+const FIELDS = ["providers","temperature","systemPrompt","promptMode","reasoningPrompt","bubbleOpacity","saveHistory","autoDelay","autoBatch","silentMode","visualFx","inlineBadge","captureBox","refEnabled","dualMode","refMode","refTopK","refMaxChars"];
 // LEGACY_KEYS 仅用于向后兼容：从旧版单-provider 配置迁移到新版 providers[] 数组
 const LEGACY_KEYS = ["endpoint","apiKey","model"];
 const PROVIDER_DEFAULTS = { endpoint: "https://api.openai.com/v1", model: "gpt-4o-mini" };
@@ -95,6 +95,16 @@ function load() {
     const radio = document.querySelector('input[name="promptMode"][value="'+mode+'"]');
     if (radio) radio.checked = true;
     refreshPromptBoxes();
+
+    // 参考资料
+    $("refEnabled").checked = (cfg.refEnabled === undefined ? true : !!cfg.refEnabled);
+    $("dualMode").checked = !!cfg.dualMode;
+    $("refMode").value = (cfg.refMode === "strict") ? "strict" : "prefer";
+    $("refTopK").value = cfg.refTopK || 4;
+    $("refTopKV").textContent = $("refTopK").value;
+    $("refMaxChars").value = cfg.refMaxChars || 2400;
+    $("refCharsV").textContent = $("refMaxChars").value;
+    renderRefDocs();
   });
 }
 
@@ -110,13 +120,16 @@ function markDirty() { if(dirty)return;dirty=true;$("saveRes").textContent="● 
 function clearDirty() { dirty=false;$("saveRes").classList.remove("aqh-dirty"); }
 
 function save() {
-  const next = { providers:collectProviders(), temperature:Number($("temperature").value), systemPrompt:$("systemPrompt").value, promptMode:getMode(), reasoningPrompt:$("reasoningPrompt").value, bubbleOpacity:Number($("bubbleOpacity").value), saveHistory:$("saveHistory").checked, autoDelay:parseInt($("autoDelay").value), autoBatch:parseInt($("autoBatch").value), silentMode:!!$("silentMode").checked, visualFx:!!$("visualFx").checked, inlineBadge:!!$("inlineBadge").checked, captureBox:$("captureBox").value };
+  const next = { providers:collectProviders(), temperature:Number($("temperature").value), systemPrompt:$("systemPrompt").value, promptMode:getMode(), reasoningPrompt:$("reasoningPrompt").value, bubbleOpacity:Number($("bubbleOpacity").value), saveHistory:$("saveHistory").checked, autoDelay:parseInt($("autoDelay").value), autoBatch:parseInt($("autoBatch").value), silentMode:!!$("silentMode").checked, visualFx:!!$("visualFx").checked, inlineBadge:!!$("inlineBadge").checked, captureBox:$("captureBox").value, refEnabled:!!$("refEnabled").checked, dualMode:!!$("dualMode").checked, refMode:$("refMode").value, refTopK:parseInt($("refTopK").value), refMaxChars:parseInt($("refMaxChars").value) };
   chrome.storage.sync.set(next, () => {
     const err = chrome.runtime?.lastError;
     if (err) { $("saveRes").textContent = "保存失败："+(err.message||""); return; }
     providers = next.providers; clearDirty();
-    $("saveRes").textContent = "✓ 已保存。";
-    setTimeout(() => { if(!dirty) $("saveRes").textContent = ""; }, 3000);
+    // 对照模式靠参考资料提供「本地一侧」，资料关着打开它只会得到一堆「未启用」空卡片
+    $("saveRes").textContent = (next.dualMode && !next.refEnabled)
+      ? "✓ 已保存。注意：对照模式已开、但参考资料是关的 —— 卡片里不会有本地对照。"
+      : "✓ 已保存。";
+    setTimeout(() => { if(!dirty) $("saveRes").textContent = ""; }, 5000);
   });
 }
 
@@ -158,6 +171,158 @@ function loadHistory() {
 function clearHistory() { chrome.storage.local.set({ history: [] }, loadHistory); }
 function escapeHtml(s) { return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
 
+// ===== 参考资料（本地 Markdown 知识库）=====
+// 文档原文存 chrome.storage.local.refDocs；检索由 background 完成（refs.js）。
+const REF_MAX_DOC = 600000;     // 单文档上限（字），约 1.2MB 存储
+const REF_MAX_TOTAL = 2400000;  // 总容量上限（字），约 4.8MB，留足配额余量
+
+function readRefDocs() {
+  return new Promise(res => chrome.storage.local.get({ refDocs: [] }, o => res(Array.isArray(o.refDocs) ? o.refDocs : [])));
+}
+function writeRefDocs(docs) {
+  return new Promise((res, rej) => {
+    chrome.storage.local.set({ refDocs: docs }, () => {
+      const err = chrome.runtime.lastError;
+      if (err) rej(new Error(err.message || '写入失败')); else res();
+    });
+  });
+}
+function refChars(d) { return d.chars || (d.text ? d.text.length : 0); }
+function fmtChars(n) { return n >= 10000 ? (n / 10000).toFixed(1) + " 万字" : n + " 字"; }
+
+// 统一落盘：失败（多为配额超限）时把原因显示在统计行，不抛未捕获异常
+async function persistRefDocs(docs, failPrefix) {
+  try { await writeRefDocs(docs); return true; }
+  catch (e) {
+    const st = $("refStat");
+    if (st) st.textContent = (failPrefix || "保存失败") + "：" + e.message;
+    return false;
+  }
+}
+
+async function renderRefDocs() {
+  const docs = await readRefDocs();
+  const box = $("refList");
+  if (!box) return;
+  box.innerHTML = "";
+
+  docs.forEach(d => {
+    const row = document.createElement("div");
+    row.className = "ref-item";
+    row.dataset.id = d.id;
+    row.innerHTML =
+      '<label class="chk r-on"><input type="checkbox" />启用</label>' +
+      '<span class="r-name"></span>' +
+      '<span class="muted r-size"></span>' +
+      '<button class="r-del" type="button">删除</button>' +
+      '<pre class="r-preview" hidden></pre>';
+
+    row.querySelector(".r-on input").checked = d.enabled !== false;
+    row.querySelector(".r-name").textContent = d.name;
+    row.querySelector(".r-name").title = "点击查看开头内容";
+    row.querySelector(".r-size").textContent = fmtChars(refChars(d));
+    row.querySelector(".r-preview").textContent = (d.text || "").slice(0, 1200);
+
+    row.querySelector(".r-on input").addEventListener("change", async e => {
+      const list = await readRefDocs();
+      const it = list.find(x => x.id === d.id);
+      if (it) { it.enabled = e.target.checked; await persistRefDocs(list); }
+    });
+    row.querySelector(".r-name").addEventListener("click", () => {
+      const p = row.querySelector(".r-preview");
+      p.hidden = !p.hidden;
+    });
+    row.querySelector(".r-del").addEventListener("click", async () => {
+      const list = (await readRefDocs()).filter(x => x.id !== d.id);
+      if (await persistRefDocs(list)) renderRefDocs();
+    });
+    box.appendChild(row);
+  });
+
+  const total = docs.reduce((n, d) => n + refChars(d), 0);
+  $("refStat").textContent = docs.length
+    ? docs.length + " 份文档 · 共 " + fmtChars(total) + (docs.some(d => d.enabled === false) ? "（部分已停用）" : "")
+    : "未导入文档（答题时按通用知识作答）";
+}
+
+async function addRefFiles(fileList) {
+  const files = Array.from(fileList || []);
+  if (!files.length) return;
+  const docs = await readRefDocs();
+  const skipped = [];
+  let added = 0;
+
+  for (const f of files) {
+    const name = f.name || "未命名.md";
+    if (!/\.(md|markdown|txt)$/i.test(name) && !/^text\//.test(f.type || "")) {
+      skipped.push(name + "（不是 .md/.txt）");
+      continue;
+    }
+    let text = "";
+    try { text = await f.text(); } catch (e) { skipped.push(name + "（读取失败）"); continue; }
+    if (!text.trim()) { skipped.push(name + "（空文件）"); continue; }
+    if (text.length > REF_MAX_DOC) { skipped.push(name + "（" + fmtChars(text.length) + "，超过单份 " + fmtChars(REF_MAX_DOC) + "）"); continue; }
+
+    const item = {
+      id: "r" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+      name,
+      chars: text.length,
+      text,
+      enabled: true,
+      addedAt: Date.now()
+    };
+    const i = docs.findIndex(d => d.name === name);
+    if (i >= 0) docs[i] = item; else docs.push(item);   // 同名覆盖
+    added++;
+  }
+
+  const total = docs.reduce((n, d) => n + refChars(d), 0);
+  if (total > REF_MAX_TOTAL) {
+    $("refStat").textContent = "超出总容量（" + fmtChars(total) + " / " + fmtChars(REF_MAX_TOTAL) + "），未导入。请先删除部分文档。";
+    return;
+  }
+  if (added && !(await persistRefDocs(docs, "导入失败"))) return;
+  await renderRefDocs();
+  if (skipped.length) {
+    const tip = document.createElement("div");
+    tip.className = "muted";
+    tip.style.marginTop = "6px";
+    tip.textContent = "已跳过：" + skipped.join("；");
+    $("refList").appendChild(tip);
+  }
+}
+
+function testRefSearch() {
+  const q = ($("refQuery").value || "").trim();
+  if (!q) { $("refTestRes").textContent = "先输入一道题"; return; }
+  $("refTestRes").textContent = "检索中…";
+  $("refTestBox").innerHTML = "";
+  try {
+    chrome.runtime.sendMessage({ type: "refs/search", payload: { query: q } }, res => {
+      if (chrome.runtime.lastError) {
+        $("refTestRes").textContent = "失败：" + chrome.runtime.lastError.message;
+        return;
+      }
+      if (!res || !res.ok) {
+        $("refTestRes").textContent = "失败：" + ((res && res.error) || "无响应");
+        return;
+      }
+      $("refTestRes").textContent = (res.note || "") + "（" + res.docs + " 份文档 / " + res.chunks + " 段可检索）";
+      (res.hits || []).forEach((h, i) => {
+        const div = document.createElement("div");
+        div.className = "item";
+        div.innerHTML = '<div><b>资料' + (i + 1) + '</b> ' + escapeHtml(h.docName) +
+          (h.section ? ' · ' + escapeHtml(h.section) : '') +
+          ' <span class="muted">相关度 ' + h.score + ' · ' + h.chars + ' 字</span></div>' +
+          '<div class="muted">' + escapeHtml(h.preview) + '…</div>';
+        $("refTestBox").appendChild(div);
+      });
+    });
+  } catch (e) {
+    $("refTestRes").textContent = "失败：" + e.message;
+  }
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   load();
   $("saveBtn").addEventListener("click", save);
@@ -171,5 +336,31 @@ document.addEventListener("DOMContentLoaded", () => {
   $("bubbleOpacity").addEventListener("input",e=>{$("opaV").textContent=Number(e.target.value).toFixed(2);markDirty();});
   $("autoDelay").addEventListener("input",e=>{$("delayV").textContent=e.target.value;markDirty();});
   $("autoBatch").addEventListener("input",e=>{$("batchV").textContent=e.target.value;markDirty();});
+
+  // 参考资料
+  $("refEnabled").addEventListener("change", markDirty);
+  $("dualMode").addEventListener("change", markDirty);
+  $("refMode").addEventListener("change", markDirty);
+  $("refTopK").addEventListener("input", e => { $("refTopKV").textContent = e.target.value; markDirty(); });
+  $("refMaxChars").addEventListener("input", e => { $("refCharsV").textContent = e.target.value; markDirty(); });
+  $("refPick").addEventListener("click", () => $("refFile").click());
+  $("refFile").addEventListener("change", e => { addRefFiles(e.target.files); e.target.value = ""; });
+  $("refClear").addEventListener("click", async () => {
+    if (!confirm("确定清空全部参考资料？此操作不可撤销。")) return;
+    if (await persistRefDocs([], "清空失败")) renderRefDocs();
+  });
+  $("refTest").addEventListener("click", testRefSearch);
+
+  const drop = $("refDrop");
+  if (drop) {
+    ["dragenter", "dragover"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add("over"); }));
+    ["dragleave", "dragend"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove("over"); }));
+    drop.addEventListener("drop", e => {
+      e.preventDefault();
+      drop.classList.remove("over");
+      addRefFiles(e.dataTransfer && e.dataTransfer.files);
+    });
+  }
+
   window.addEventListener("beforeunload",e=>{if(dirty){e.preventDefault();e.returnValue="";}});
 });

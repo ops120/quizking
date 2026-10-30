@@ -32,11 +32,11 @@ window.QuizBadge = (() => {
 
   function qs() { return window.QuizSnapshot || {}; }
 
-  // 配置：只有选项页打开 inlineBadge 才渲染
+  // 配置：选项页打开 inlineBadge，或打开「对照模式」（双答案必须依托徽标载体）时渲染
   function configure(cfg) {
-    enabled = !!(cfg && cfg.inlineBadge);
+    enabled = !!(cfg && (cfg.inlineBadge || cfg.dualMode));
     if (!enabled) clearAllAccessible();
-    log('configure: inlineBadge=' + enabled);
+    log('configure: inlineBadge=' + !!(cfg && cfg.inlineBadge) + ' dualMode=' + !!(cfg && cfg.dualMode) + ' enabled=' + enabled);
     return enabled;
   }
 
@@ -168,6 +168,108 @@ window.QuizBadge = (() => {
     return true;
   }
 
+  // ===== 对照模式（dualMode）：本地资料原文 + LLM 答案并列，用户自己判断 =====
+  // 定位：本地检索（BM25）能命中资料，但"命中的原文"和"模型的结论"可能不一致，
+  // 谁对由用户定。所以这里只负责「如实并列 + 收集选择」，不替用户决定。
+  // 两条铁律：
+  //   1. 本地一侧原样输出命中段落（不抽答案、不总结），可逐字核查；
+  //   2. 不自动填写任何选项——必须用户点「采用」才由 content.js 执行。
+  function renderDual(doc, question, data, handlers) {
+    const root = getRoot(doc, question.index);
+    if (!root) return false;
+    const badge = ensure(root);
+    if (!badge) return false;
+
+    const llm = (data && data.llm) || {};
+    // refs 三种状态要分开说，否则排查方向会被带偏：
+    //   null → 本次压根没检索（LLM 调用前就失败）
+    //   []   → 检索了但没命中
+    //   数组 → 命中原文
+    const refsRaw = data ? data.refs : undefined;
+    const refsSkipped = refsRaw === null;
+    const refs = Array.isArray(refsRaw) ? refsRaw : [];
+    const label = llm.label || '?';
+    // 推理失败也要出卡片：模型没答案时，命中的资料原文往往才是唯一线索。
+    // 此时 LLM 区块只报错、不给「采用」按钮（没有可采用的答案）。
+    const llmErr = String((data && data.error) || '').trim();
+
+    let refsHtml;
+    if (refs.length) {
+      refsHtml = refs.map((r, i) => {
+        const src = escapeHtml(r.docName || '未命名文档') + (r.section ? ' · ' + escapeHtml(r.section) : '');
+        return '<details class="qku-ref"' + (i === 0 ? ' open' : '') + '>' +
+          '<summary class="qku-ref-src">' + src + (r.truncated ? '（截断）' : '') + '</summary>' +
+          '<div class="qku-ref-full">' + escapeHtml(String(r.text || '')) + '</div>' +
+          '</details>';
+      }).join('');
+    } else if (data && data.refsOff) {
+      // 「资料功能没开」和「资料里没有这题」是两回事，不能都写成"未命中"
+      refsHtml = '<div class="qku-ref-none">参考资料未启用 —— 设置页「📚 参考资料」里打开后才有本地对照</div>';
+    } else if (refsSkipped) {
+      refsHtml = '<div class="qku-ref-none">本次未检索资料：模型调用前就失败了，没有本地对照</div>';
+    } else {
+      refsHtml = '<div class="qku-ref-none">本地资料未命中这道题 —— 左无对照，只能看模型了</div>';
+    }
+
+    badge.classList.remove('qku-pending', 'qku-err', 'qku-ok', 'qku-wrong');
+    badge.classList.add('qku-dual-badge');
+    badge.style.display = 'block';
+    badge.innerHTML =
+      '<div class="qku-dual">' +
+        '<div class="qku-dual-head">' +
+          '<span class="qku-dual-title">第 ' + (question.index + 1) + ' 题 · 两个答案，你来定</span>' +
+          '<span class="qku-dual-state">待选择</span>' +
+        '</div>' +
+        '<div class="qku-dual-sec">' +
+          '<div class="qku-dual-label">📚 本地资料原文' + (refs.length ? '（BM25 命中 ' + refs.length + ' 段）' : '') + '</div>' +
+          refsHtml +
+        '</div>' +
+        '<div class="qku-dual-sec">' +
+          '<div class="qku-dual-label">🤖 LLM 答案</div>' +
+          (llmErr
+            ? '<div class="qku-dual-err">未给出答案：' + escapeHtml(llmErr) + '</div>'
+            : '<div class="qku-dual-ans">' + escapeHtml(String(label)) +
+                (llm.answer && String(llm.answer).trim().toUpperCase() !== String(label).toUpperCase()
+                  ? '<span class="qku-dual-ans-sub">' + escapeHtml(String(llm.answer).slice(0, 60)) + '</span>' : '') +
+              '</div>' +
+              (llm.reasoning ? '<details class="qku-badge-reason"><summary>解析</summary><span class="qku-badge-reason-text">' + escapeHtml(llm.reasoning) + '</span></details>' : '')) +
+        '</div>' +
+        '<div class="qku-dual-actions">' +
+          (llmErr
+            ? '<button type="button" class="qku-btn qku-btn-ghost" data-act="wrong">标记为需手填</button>'
+            : '<button type="button" class="qku-btn qku-btn-primary" data-act="llm">采用 LLM 答案</button>' +
+              '<button type="button" class="qku-btn qku-btn-ghost" data-act="wrong">都不对</button>') +
+        '</div>' +
+      '</div>';
+
+    // preventDefault + stopPropagation：徽标紧跟在题目容器之后，按钮点击不能冒泡到
+    // 站点的选项/label 上，否则"点按钮"会顺手把某个选项点掉。
+    const bind = (sel, fn) => {
+      const el = badge.querySelector(sel);
+      if (!el) return;
+      el.onclick = (e) => {
+        try { e.preventDefault(); e.stopPropagation(); } catch(err) {}
+        try { fn(badge); } catch(err) { log('dual action error', err); }
+      };
+    };
+    bind('[data-act="llm"]', (b) => handlers && handlers.useLlm && handlers.useLlm(b));
+    bind('[data-act="wrong"]', (b) => handlers && handlers.reject && handlers.reject(b));
+    return true;
+  }
+
+  // 用户做出选择后更新卡片状态（按钮替换成结论，避免重复点）
+  function setDualState(badge, state, text) {
+    if (!badge) return false;
+    badge.classList.remove('qku-pending', 'qku-err');
+    badge.classList.toggle('qku-ok', state === 'ok');
+    badge.classList.toggle('qku-wrong', state === 'wrong');
+    const st = badge.querySelector('.qku-dual-state');
+    if (st) st.textContent = state === 'wrong' ? '已标记' : '已采用';
+    const acts = badge.querySelector('.qku-dual-actions');
+    if (acts) acts.innerHTML = '<span class="qku-dual-done">' + escapeHtml(text || '') + '</span>';
+    return true;
+  }
+
   // 清掉本扩展注入的所有徽标（重跑自动答题前调用，避免新旧答案并存）
   function clear(doc) {
     const d = doc || document;
@@ -216,5 +318,5 @@ window.QuizBadge = (() => {
     return setVisible(!isVisible());
   }
 
-  return { configure, isEnabled, renderPending, fill, fillError, forceFill, forceError, clear, clearAllAccessible, setVisible, isVisible, toggleVisible };
+  return { configure, isEnabled, renderPending, fill, fillError, forceFill, forceError, renderDual, setDualState, clear, clearAllAccessible, setVisible, isVisible, toggleVisible };
 })();

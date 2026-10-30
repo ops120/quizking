@@ -476,8 +476,17 @@ window.QuizSnapshot = (() => {
     const debug = { container: 0, letter: 0, radio: 0, text: 0, sections: [] };
 
     // 策略 1：容器级（标准 class / 打分探测 / EduSoho）
+    // 先清掉上一轮遗留的锚点：兜底路径会把 data-qku-q="0" 打到 body 上，
+    // 而 findQuestionRoot(0) 是 querySelector 取文档序第一个，body 会挡住真正的
+    // 第 1 题——徽标插不进去（inlineBadge / 对照模式都受影响）。
+    try { doc.querySelectorAll('[data-qku-q]').forEach(el => el.removeAttribute('data-qku-q')); } catch(e) {}
     const roots = findQuestionRoots(doc);
-    roots.forEach((r, i) => { try { r.setAttribute('data-qku-q', String(i)); } catch(e) {} });
+    // body / documentElement 是"整页当一题"的兜底，没有题目语义，不能当锚点
+    roots.forEach((r, i) => {
+      try {
+        if (r !== doc.body && r !== doc.documentElement) r.setAttribute('data-qku-q', String(i));
+      } catch(e) {}
+    });
     const containerQ = roots.map((root, qi) => {
       const es = extractEduSoho(root);
       const qType = es ? es.type : detectType(root);
@@ -542,6 +551,9 @@ window.QuizSnapshot = (() => {
     // 注意：不能按锚点去重——平铺结构（题干和选项同层、无 per-question 容器）下，
     // 多道题共用同一个祖先锚点是正常现象，去重会把 3 道题合并成 1 道（实测踩过）。
     const out = [];
+    // 再清一次：字母/radio 策略在切题时也打过锚点，其中有些并不是最终题锚点。
+    // 不清就会留下同号重复锚点，findQuestionRoot 取到哪一个全看文档序。
+    try { doc.querySelectorAll('[data-qku-q]').forEach(el => el.removeAttribute('data-qku-q')); } catch(e) {}
     merged.forEach(q => {
       q.index = out.length;
       try {
@@ -558,7 +570,8 @@ window.QuizSnapshot = (() => {
   }
 
   // rootDoc：传入 iframe 的 document 可提取跨域/同源 iframe 内的题目；缺省用顶层文档
-  function takeSnapshot(rootDoc) {    const doc = rootDoc || document;
+  function takeSnapshot(rootDoc) {
+    const doc = rootDoc || document;
     const questions = collectQuestions(doc);
 
     // 提交按钮检测

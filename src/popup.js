@@ -40,9 +40,16 @@ document.addEventListener("DOMContentLoaded", () => {
   chrome.runtime.sendMessage({ type: "aqh/test" }, res => {
     if (!res || !res.ok) { $("status").textContent = "插件暂未就绪"; return; }
     const n = res.providerCount || 0;
-    $("keyState").textContent = res.hasKey
+    const docTxt = res.refDocs ? (" · 📚" + res.refDocs) : "";
+    // 对照模式影响"会不会自动填"，必须在点「自动答题」之前就能看到
+    const dualTxt = res.dualMode ? " · 🖐对照" : "";
+    $("keyState").textContent = (res.hasKey
       ? ("API Key ✓" + (n > 1 ? (" · " + n + " 个服务商") : ""))
-      : "未配置 API Key";
+      : "未配置 API Key") + docTxt + dualTxt;
+    $("keyState").title = (res.refDocs
+      ? ("已导入 " + res.refDocs + " 份参考资料" + (res.refEnabled ? "" : "（当前已停用）"))
+      : "未导入参考资料：设置 → 📚 参考资料") +
+      (res.dualMode ? "\n对照模式已开：两个答案并列，点选后才填" : "");
     // 静默模式下显示答题状态
     if (res.silentMode && res.status && res.status.text) {
       $("status").textContent = res.status.text;

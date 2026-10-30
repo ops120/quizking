@@ -36,7 +36,7 @@
   },
   "content_scripts": [{
     "matches": ["<all_urls>"],
-    "js": ["quiz-snapshot.js", "highlight.js", "answer-executor.js", "answer-badge.js", "content.js"],
+    "js": ["quiz-snapshot.js", "highlight.js", "answer-executor.js", "answer-badge.js", "manual-queue.js", "content.js"],
     "css": ["bubble.css"],
     "run_at": "document_idle",
     "all_frames": true
