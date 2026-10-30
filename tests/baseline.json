@@ -1,0 +1,26 @@
+{
+  "contenteditable.html": {
+    "questions": 2,
+    "types": "short_answer,short_answer"
+  },
+  "edusoho.html": {
+    "questions": 2,
+    "types": "single_choice,multi_choice"
+  },
+  "jutiku-real.html": {
+    "questions": 46,
+    "types": "single_choice,single_choice,single_choice,single_choice,single_choice,single_choice,single_choice,single_choice,single_choice,single_choice,single_choice,single_choice,single_choice,single_choice,single_choice,single_choice,single_choice,single_choice,single_choice,single_choice,single_choice,single_choice,single_choice,single_choice,single_choice,single_choice,single_choice,single_choice,single_choice,single_choice,short_answer,short_answer,short_answer,short_answer,single_choice,single_choice,single_choice,single_choice,single_choice,single_choice,single_choice,single_choice,single_choice,single_choice,single_choice,short_answer"
+  },
+  "jutiku-style.html": {
+    "questions": 3,
+    "types": "single_choice,single_choice,single_choice"
+  },
+  "mixed-sections.html": {
+    "questions": 6,
+    "types": "single_choice,single_choice,multi_choice,short_answer,short_answer,short_answer"
+  },
+  "radio-group-zh.html": {
+    "questions": 2,
+    "types": "single_choice,single_choice"
+  }
+}

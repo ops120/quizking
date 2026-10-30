@@ -1,0 +1,16 @@
+{
+  "name": "quizking-tests",
+  "private": true,
+  "type": "module",
+  "description": "QuizKing 本地测试脚手架（不参与扩展打包）",
+  "scripts": {
+    "test": "node tests/run.mjs && node tests/refs.test.mjs && node tests/manual-queue.test.mjs && node tests/dual.test.mjs",
+    "test:refs": "node tests/refs.test.mjs",
+    "test:queue": "node tests/manual-queue.test.mjs",
+    "test:dual": "node tests/dual.test.mjs"
+  },
+  "devDependencies": {
+    "jsdom": "^30.1.3",
+    "playwright-core": "^1.64.1"
+  }
+}
