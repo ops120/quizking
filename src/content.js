@@ -34,6 +34,18 @@
     );
   }
   function escapeHtml(s) { return String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+  // 复制文本到剪贴板：优先 navigator.clipboard，失败降级 execCommand（http 页/旧内核兜底）
+  function copyText(text) {
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(text); return true; }
+    } catch(e) {}
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.select();
+      const ok = document.execCommand('copy'); ta.remove(); return ok;
+    } catch(e) { return false; }
+  }
   function callBg(type, payload, timeoutMs = 10000) {
     return new Promise(resolve => {
       try {
@@ -407,10 +419,29 @@
     const snapshot = QuizSnapshot.takeSnapshot(targetDoc);
     const qs = snapshot.questions || [];
 
+    // 策略统计进诊断日志：用户实测出问题时，一键复制这些就能离线定位是哪层策略漏了
+    const dbg = snapshot.debug || {};
+    diag('策略统计: 容器=' + (dbg.container || 0), '字母=' + (dbg.letter || 0), 'radio=' + (dbg.radio || 0),
+         '文本=' + (dbg.text || 0), '分节标题=' + JSON.stringify(dbg.sections || []));
+    snapshot.questions.slice(0, 12).forEach(q => {
+      diag('  题' + q.index, q.type, '题干=' + JSON.stringify((q.stem || '').slice(0, 50)),
+           '选项=' + q.options.length);
+    });
+
     if (!qs.length) {
       const msg = '未检测到可作答题目 —— 页面可能是纯文本真题（无可点击选项），请改用「选区」或「截图」通道';
       setStatus(msg, false);
-      if (!cfg?.silentMode) renderBubble('<div class="aqh-err">' + escapeHtml(msg) + '</div>', { status: '检测完成' });
+      if (!cfg?.silentMode) {
+        renderBubble('<div class="aqh-err">' + escapeHtml(msg) + '</div>' +
+          '<div style="margin-top:8px"><button id="aqh-diag-copy" class="aqh-btn-primary">📋 复制诊断日志</button></div>',
+          { status: '检测完成' });
+        const cp = document.getElementById('aqh-diag-copy');
+        if (cp) cp.addEventListener('click', () => {
+          copyText('[QuizKing 诊断]\n' + diagLines.join('\n') + '\n[策略] ' + JSON.stringify(snapshot.debug || {}));
+          cp.textContent = '✓ 已复制，粘贴给 AI';
+          setTimeout(() => { cp.textContent = '📋 复制诊断日志'; }, 2500);
+        });
+      }
       return { ok: true, actionable: false, total: 0, message: msg };
     }
 
@@ -436,11 +467,18 @@
         '<div class="aqh-reasoning-block"><div class="aqh-reasoning-label">检测结果</div>' + escapeHtml(msg) +
         '<div style="margin-top:6px;font-size:12px" class="' + (activeCount ? '' : 'aqh-err') + '">' + escapeHtml(llmText) + '</div>' +
         (clickable && activeCount ? '<div style="margin-top:8px"><button id="aqh-detect-go" class="aqh-btn-primary">开始自动作答</button></div>' : '') +
+        '<div style="margin-top:8px"><button id="aqh-diag-copy" class="aqh-btn-primary" style="background:#8a8a85">📋 复制诊断日志</button></div>' +
         '</div>',
         { status: '检测完成' }
       );
       const go = document.getElementById('aqh-detect-go');
       if (go) go.addEventListener('click', () => autoAnswer());
+      const cp = document.getElementById('aqh-diag-copy');
+      if (cp) cp.addEventListener('click', () => {
+        copyText('[QuizKing 诊断]\n' + diagLines.join('\n') + '\n[策略] ' + JSON.stringify(snapshot.debug || {}));
+        cp.textContent = '✓ 已复制，粘贴给 AI';
+        setTimeout(() => { cp.textContent = '📋 复制诊断日志'; }, 2500);
+      });
     }
     return { ok: true, actionable: clickable > 0 && activeCount > 0, total: qs.length, clickable, activeCount, byType, message: msg + '｜' + llmText };
   }
@@ -462,6 +500,28 @@
       autoAnswering = false; // 任何路径退出都释放锁，防止状态卡死
       paused = false;
     }
+  }
+
+  // 失败清单气泡：列出需人工接手的题，题号按钮一键滚动定位 + 高亮（L2 降级收尾）
+  function renderManualList(list, doc) {
+    if (!list || !list.length) return;
+    const items = list.map(it => '<button class="qku-manual-btn" data-qidx="' + it.index + '">第 ' + (it.index + 1) + ' 题</button>').join(' ');
+    renderBubble(
+      '<div class="aqh-reasoning-block"><div class="aqh-reasoning-label">需手动处理（' + list.length + ' 题）</div>' +
+      '<div style="margin:6px 0">' + items + '</div>' +
+      '<div class="aqh-reasoning-sub">答案已标在各题下方，点击题号可定位并高亮</div></div>',
+      { force: true, status: '待人工' }
+    );
+    setTimeout(() => {
+      document.querySelectorAll('.qku-manual-btn').forEach(btn => {
+        btn.onclick = () => {
+          const idx = btn.getAttribute('data-qidx');
+          const sel = '[data-qku-q="' + idx + '"]';
+          const el = (doc || document).querySelector(sel);
+          if (el) { try { el.scrollIntoView({ block: 'center' }); } catch(e) {} QuizHighlight?.highlightElement(sel, doc); }
+        };
+      });
+    }, 0);
   }
 
   async function autoAnswerInner() {
@@ -548,6 +608,7 @@
     }
 
     let answered = 0, failed = 0;
+    const failedManual = []; // L2 降级：收集需人工接手的题（自动点击/推理失败）
 
     // 分批并行推理
     const qs = snapshot.questions;
@@ -601,7 +662,8 @@
           log('题', q.index, '推理失败:', err, '| 原始返回:', JSON.stringify(res).slice(0, 300));
           diag('!! 题' + q.index, '推理失败:', err, '| 返回=', JSON.stringify(res).slice(0, 200));
           if (!silent) QuizHighlight?.showPanel('❌ 推理失败', '第 ' + (q.index+1) + ' 题', err);
-          if (window.QuizBadge && cfg?.inlineBadge) QuizBadge.fillError(targetDoc, q, err);
+          if (window.QuizBadge) QuizBadge.forceError(targetDoc, q, err);
+          failedManual.push({ index: q.index, reason: '推理失败：' + err });
           continue;
         }
 
@@ -619,12 +681,22 @@
         log('题', q.index, 'executeAnswer →', ok);
         diag('题' + q.index, 'executeAnswer →', ok);
         // 行内徽标：答案原位替换占位（盒子不变，选项不位移）；clicked 决定"已勾选/未勾选"
-        if (window.QuizBadge && cfg?.inlineBadge) QuizBadge.fill(targetDoc, q, res, ok);
+        if (window.QuizBadge) QuizBadge.fill(targetDoc, q, res, ok);
         if (ok) answered++; else {
           failed++;
           log('题', q.index, '点击失败，选项数据:', JSON.stringify(q.options).slice(0, 300));
           diag('!! 题' + q.index, '点击失败。选项数据=', JSON.stringify(q.options).slice(0, 250));
-          if (!silent) QuizHighlight?.showPanel('❌ 点击失败', '第 ' + (q.index+1) + ' 题', '选项元素未找到或不可点击，请手动作答');
+          // L2 自动降级：点不上的题，把答案标在题旁 + 高亮定位，交人工确认（不再只是报错）
+          if (window.QuizBadge) QuizBadge.forceFill(targetDoc, q, res, false);
+          failedManual.push({ index: q.index, reason: '无法自动点击，答案已标在题旁' });
+          if (!silent) {
+            QuizHighlight?.showPanel('⚠ 待你手点', '第 ' + (q.index+1) + ' 题', '答案已标在题目下方，请确认后手动点选');
+            const root = QuizSnapshot.findQuestionRoot(targetDoc, q.index);
+            if (root) {
+              try { root.scrollIntoView({ block: 'center' }); } catch(e) {}
+              QuizHighlight?.highlightElement('[data-qku-q="' + q.index + '"]', targetDoc);
+            }
+          }
         }
         await sleep(cfg?.autoDelay || 300);
       }
@@ -647,6 +719,7 @@
     if (failed > 0) {
       diag('结果: ' + answered + ' 成功 / ' + failed + ' 失败');
       flushDiag();
+      renderManualList(failedManual, targetDoc);
     }
   }
 

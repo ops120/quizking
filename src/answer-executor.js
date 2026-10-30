@@ -28,34 +28,67 @@ window.AnswerExecutor = (() => {
     try { return d.querySelector(selector); } catch(e) { log('querySelector 抛错:', selector, e.message); return null; }
   }
 
+  // 验证选项是否真的被选中 —— 这是 P0 修复的核心：
+  // 原生 click 对 React/Vue/自绘控件经常"调用了但状态没变"，不验证就会产生假成功。
+  function verifySelected(selector, doc) {
+    const d = doc || document;
+    const el = findEl(d, selector);
+    if (!el) return false;
+    // 1) 原生表单控件
+    if (el.type === 'checkbox' || el.type === 'radio') {
+      if (el.checked) return true;
+    }
+    // 2) ARIA 控件
+    const ari = el.getAttribute && el.getAttribute('aria-checked');
+    if (ari === 'true') return true;
+    // 3) 真正状态在内部 input 上（点的是 label/容器）
+    const inner = el.querySelector && el.querySelector('input[type=radio], input[type=checkbox]');
+    if (inner && inner.checked) return true;
+    // 4) 自绘控件：祖先出现选中态 class
+    let p = el.parentElement;
+    while (p && p !== d.body) {
+      if (p.classList && (p.classList.contains('selected') || p.classList.contains('checked') ||
+          p.classList.contains('active') || p.classList.contains('is-active') || p.classList.contains('is-checked'))) return true;
+      p = p.parentElement;
+    }
+    return false;
+  }
+
+  // 完整事件序列（兼容受控组件），点击未生效时补发
+  function dispatchClickSequence(el, doc) {
+    const d = doc || document;
+    try {
+      const view = d.defaultView || window;
+      const opts = { bubbles: true, cancelable: true, view };
+      ['mousedown', 'mouseup', 'click', 'pointerdown', 'pointerup'].forEach(type => {
+        const Ctor = type.startsWith('pointer') ? view.PointerEvent : view.MouseEvent;
+        el.dispatchEvent(new Ctor(type, opts));
+      });
+      return true;
+    } catch(e) { log('事件序列点击失败:', e.message); return false; }
+  }
+
   async function clickOption(selector, dryRun, doc) {
     if (dryRun) return true;
+    const el = findEl(doc, selector);
+    if (!el) { log('element not found:', selector, '| doc 是 iframe?', !!(doc && doc !== document)); return false; }
+    log('click:', selector, '| tag=', el.tagName, '| disabled=', !!el.disabled);
     try {
-      const el = findEl(doc, selector);
-      if (!el) {
-        log('element not found:', selector, '| doc 是 iframe?', !!(doc && doc !== document));
-        return false;
-      }
-      log('click:', selector, '| tag=', el.tagName, '| disabled=', !!el.disabled);
       el.click();
-      return true;
+      await sleep(60);
+      if (verifySelected(selector, doc)) return true;
+      // 原生 click 未改变选中态 → 补发事件序列（受控组件常见）
+      log('原生 click 未生效，降级事件序列:', selector);
+      dispatchClickSequence(el, doc);
+      await sleep(60);
+      if (verifySelected(selector, doc)) return true;
+      log('点击后仍验证失败（可能需人工）:', selector);
+      return false;
     } catch(e) {
-      log('原生 click 失败，降级事件序列:', e.message);
-      // force click 降级：完整事件序列以兼容 React/Vue/Angular
+      log('clickOption 异常，降级事件序列:', e.message);
       try {
-        const el = findEl(doc, selector);
-        if (el) {
-          const opts = { bubbles: true, cancelable: true, view: doc?.defaultView || window };
-          el.dispatchEvent(new MouseEvent('mousedown', opts));
-          el.dispatchEvent(new MouseEvent('mouseup', opts));
-          el.dispatchEvent(new MouseEvent('click', opts));
-          // Pointer events for modern frameworks
-          el.dispatchEvent(new PointerEvent('pointerdown', opts));
-          el.dispatchEvent(new PointerEvent('pointerup', opts));
-          log('事件序列点击完成:', selector);
-          return true;
-        }
-        log('事件序列点击失败：元素仍未找到');
+        const e2el = findEl(doc, selector);
+        if (e2el) { dispatchClickSequence(e2el, doc); await sleep(60); return verifySelected(selector, doc); }
       } catch(e2) { log('force click failed:', e2.message); }
       return false;
     }
@@ -97,32 +130,60 @@ window.AnswerExecutor = (() => {
       case 'multi_choice': {
         const indices = answer.optionIndices || [];
         if (indices.length === 0) return false;
-
+        let allOk = true;
         for (const idx of indices) {
           const opt = question.options[idx];
-          if (!opt || !opt.selector) continue;
+          if (!opt || !opt.selector) { allOk = false; continue; }
           qh().highlightElement && qh().highlightElement(opt.selector, doc);
           qh().showPanel && qh().showPanel('☑ 多选', '[' + opt.text + ']', reason);
-          if (!dryRun) { await sleep(200); await clickOption(opt.selector, false, doc); }
+          if (!dryRun) { await sleep(200); const ok = await clickOption(opt.selector, false, doc); if (!ok) allOk = false; }
         }
-        return true;
+        return allOk;
       }
 
       case 'fill_blank':
       case 'short_answer': {
         const text = answer.answer || '';
         if (!text) return false;
-        // 找第一个 input/textarea
-        const input = doc.querySelector('input[type=text], input:not([type]), textarea');
+        // 限定在题目容器内找输入框：原逻辑用全局第一个 input，多道填空题会全部填进第一题的框。
+        // 题目容器由 quiz-snapshot 打的 data-qku-q 锚点定位；找不到时再退回全局第一个（兼容）。
+        let root = null;
+        try { root = qs().findQuestionRoot && qs().findQuestionRoot(doc, question.index); } catch(e) {}
+        const scope = (root && root !== doc.body) ? root : doc;
+        // 输入框候选：原生 input/textarea + contenteditable 富文本框（如 jutiku 简答框）
+        const CE_SEL = 'input[type=text], input:not([type]), textarea, [contenteditable]:not([contenteditable="false"])';
+        const candidates = Array.from(scope.querySelectorAll(CE_SEL))
+          .filter(e => !(e.closest && e.closest('.qku-answer-mark')));
+        const input = candidates[0] || doc.querySelector(CE_SEL);
         if (!input) return false;
+        // contenteditable 富文本：非表单元素，靠 textContent + input 事件写入
+        const isCE = input.tagName !== 'INPUT' && input.tagName !== 'TEXTAREA'
+          && input.getAttribute('contenteditable') != null
+          && input.getAttribute('contenteditable').toLowerCase() !== 'false';
         qh().highlightElement && qh().highlightElement(buildSelector(input), doc);
         qh().showPanel && qh().showPanel('⌨ 填入', text.substring(0, 30), reason);
         if (!dryRun) {
-          input.value = text;
-          input.dispatchEvent(new Event('input', { bubbles: true }));
-          input.dispatchEvent(new Event('change', { bubbles: true }));
+          try { input.focus && input.focus(); } catch(e) {}
+          if (isCE) {
+            input.textContent = text;
+            // 光标移到末尾，避免后续输入覆盖
+            try {
+              const d = doc || document;
+              const range = d.createRange(); const so = d.getSelection && d.getSelection();
+              range.selectNodeContents(input); range.collapse(false);
+              if (so) { so.removeAllRanges(); so.addRange(range); }
+            } catch(e) {}
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+            input.dispatchEvent(new Event('change', { bubbles: true }));
+          } else {
+            input.value = text;
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+            input.dispatchEvent(new Event('change', { bubbles: true }));
+          }
         }
-        return true;
+        // 简单验证：写入后内容非空（填空无法比对内容，至少确认写入成功）
+        const written = isCE ? (input.textContent || '').trim() : (input.value || '').trim();
+        return !dryRun ? written.length > 0 : true;
       }
 
       default:

@@ -137,6 +137,37 @@ window.QuizBadge = (() => {
     return true;
   }
 
+  // ===== 降级兜底（L2）：无视 inlineBadge 开关，在题旁强制显示答案 =====
+  // 用于自动点击失败 / 推理失败时，把答案留下交人工确认，保证项目不因"点不动"而废掉。
+  function forceFill(doc, question, res, clicked) {
+    const root = getRoot(doc, question.index);
+    if (!root) return false;
+    const badge = ensure(root);
+    if (!badge) return false;
+    badge.classList.remove('qku-pending', 'qku-err');
+    const chipCls = clicked ? 'qku-badge-chip' : 'qku-badge-chip qku-badge-chip-warn';
+    const chipText = clicked ? '已勾选' : '待你确认';
+    badge.innerHTML =
+      '<span class="qku-badge-head">' +
+        '<span class="qku-badge-ans">答案 ' + escapeHtml(letters(res)) + '</span>' +
+        '<span class="' + chipCls + '">' + chipText + '</span>' +
+      '</span>' +
+      (res.answer ? '<span class="qku-badge-text">' + escapeHtml(String(res.answer).slice(0, 120)) + '</span>' : '') +
+      (res.reasoning ? '<details class="qku-badge-reason"><summary>解析</summary><span class="qku-badge-reason-text">' + escapeHtml(res.reasoning) + '</span></details>' : '');
+    return true;
+  }
+
+  function forceError(doc, question, error) {
+    const root = getRoot(doc, question.index);
+    if (!root) return false;
+    const badge = ensure(root);
+    if (!badge) return false;
+    badge.classList.remove('qku-pending');
+    badge.classList.add('qku-err');
+    badge.innerHTML = '<span class="qku-badge-err-text">需手动处理：' + escapeHtml(error || '未知错误') + '</span>';
+    return true;
+  }
+
   // 清掉本扩展注入的所有徽标（重跑自动答题前调用，避免新旧答案并存）
   function clear(doc) {
     const d = doc || document;
@@ -185,5 +216,5 @@ window.QuizBadge = (() => {
     return setVisible(!isVisible());
   }
 
-  return { configure, isEnabled, renderPending, fill, fillError, clear, clearAllAccessible, setVisible, isVisible, toggleVisible };
+  return { configure, isEnabled, renderPending, fill, fillError, forceFill, forceError, clear, clearAllAccessible, setVisible, isVisible, toggleVisible };
 })();

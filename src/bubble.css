@@ -390,3 +390,12 @@ html.qku-stealth .aqh-sel {
 [qku-answer-state="off"] .qku-badge-pending-text,
 [qku-answer-state="off"] .qku-badge-err-text { display: none !important; }
 [qku-answer-state="off"] .qku-answer-badge::after { content: "答案已隐藏"; font-size: 11px; color: #888780; }
+
+/* L2 降级：失败清单气泡里的"题号"按钮 */
+.qku-manual-btn {
+  display: inline-block; margin: 3px; padding: 4px 10px;
+  border: 1px solid #EF9F27; border-radius: 6px;
+  background: #FAEEDA; color: #633806; font-size: 12px; cursor: pointer;
+}
+.qku-manual-btn:hover { background: #EF9F27; color: #fff; }
+.aqh-reasoning-sub { font-size: 11px; color: #888780; margin-top: 4px; }
